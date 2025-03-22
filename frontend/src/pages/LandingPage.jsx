@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 
 const LandingContainer = styled.div`
+  width: 100%;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 100vh;
-  padding: 4rem 2rem;
-  background-color: #13111a;
+  justify-content: center;
+  padding: 2rem;
   position: relative;
+  background-color: #13111a;
+  color: white;
   overflow: hidden;
 `;
 
