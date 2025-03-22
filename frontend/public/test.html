@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>React Test</title>
+  <style>
+    body {
+      background-color: #13111a;
+      color: white;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    #app {
+      text-align: center;
+      padding: 20px;
+      border: 1px solid #7b68ee;
+      border-radius: 10px;
+      background-color: rgba(30, 27, 38, 0.7);
+      max-width: 500px;
+      width: 100%;
+    }
+    h1 {
+      color: #7b68ee;
+    }
+    button {
+      background-color: #7b68ee;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin-top: 20px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Loading React...</h1>
+    <p>If this text remains, React is not loading properly.</p>
+  </div>
+
+  <!-- Load React directly from CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script>
+    'use strict';
+
+    // Create a simple React component
+    const e = React.createElement;
+
+    class TestApp extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { clicked: false };
+        this.handleClick = this.handleClick.bind(this);
+      }
+
+      handleClick() {
+        this.setState({ clicked: true });
+      }
+
+      render() {
+        if (this.state.clicked) {
+          return e('div', null, [
+            e('h1', null, 'React is working!'),
+            e('p', null, 'The button was clicked successfully.'),
+            e('button', { onClick: () => this.setState({ clicked: false }) }, 'Reset')
+          ]);
+        }
+
+        return e('div', null, [
+          e('h1', null, 'React Test Page'),
+          e('p', null, 'If you can see this, React is loading correctly from CDN.'),
+          e('button', { onClick: this.handleClick }, 'Click Me')
+        ]);
+      }
+    }
+
+    // Wait for DOMContentLoaded to ensure the container is available
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('DOM loaded, rendering React');
+      const container = document.getElementById('app');
+      if (!container) {
+        console.error('Container element not found!');
+        return;
+      }
+      
+      try {
+        // Use ReactDOM.createRoot for React 18
+        const root = ReactDOM.createRoot(container);
+        root.render(e(TestApp));
+        console.log('React rendered successfully');
+      } catch (error) {
+        console.error('Error rendering React:', error);
+        container.innerHTML = `
+          <h1 style="color: red;">Error</h1>
+          <p>${error.message}</p>
+          <pre>${error.stack}</pre>
+        `;
+      }
+    });
+  </script>
+</body>
+</html> 
