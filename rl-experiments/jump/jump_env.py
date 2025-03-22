@@ -31,7 +31,7 @@ class BlockJumpEnv(gym.Env):
         self.action_space = spaces.Box(low=-10, high=10, shape=(3,), dtype=np.float32)
         
         self.step_counter = 0
-        self.max_episode_steps = 10000
+        self.max_episode_steps = 1000
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
