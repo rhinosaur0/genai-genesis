@@ -42,3 +42,15 @@ coverage/
 
 *.obj
 *.mtl
+
+model/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraformrc
+terraform.rc
+crash.log
+.terraform.lock.hcl

@@ -1,5 +1,9 @@
 import pybullet as p
+<<<<<<< HEAD
 import xml.etree.ElementTree as ET
+=======
+import os
+>>>>>>> 1a9c242a7bb9c7e13129b30a0dd009683be81864
 
 
 class GeneralObject:
@@ -12,14 +16,25 @@ class GeneralObject:
 
     def load(self):
         """Load the mesh object as a collision and visual shape."""
+        # Construct the full path to the obj file in the assets directory
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        obj_path = os.path.join(base_dir, "assets", self.filename)
+        
+        # Print the path for debugging
+        print(f"Loading mesh from: {obj_path}")
+        
+        # Check if the file exists
+        if not os.path.exists(obj_path):
+            raise FileNotFoundError(f"Could not find model file at {obj_path}")
+            
         collision_shape = p.createCollisionShape(
             shapeType=p.GEOM_MESH,
-            fileName=self.filename,
+            fileName=obj_path,
             meshScale=self.scale
         )
         visual_shape = p.createVisualShape(
             shapeType=p.GEOM_MESH,
-            fileName=self.filename,
+            fileName=obj_path,
             meshScale=self.scale,
             rgbaColor=[0, 1, 0, 1]  # Green color
         )
