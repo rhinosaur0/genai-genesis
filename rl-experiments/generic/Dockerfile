@@ -4,7 +4,7 @@ WORKDIR /app
 
 
 COPY requirements.txt .
-COPY train.py .
+COPY train_agent.py .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
