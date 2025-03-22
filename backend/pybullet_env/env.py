@@ -58,7 +58,7 @@ class BulletEnv(gym.Env):
         # Auto-steer agent toward target.
         self.agent.set_velocity_toward(self.target_object.position, speed=4.0)
         p.stepSimulation()
-        time.sleep(1/2400)
+        time.sleep(1/20)
         obs = self._get_obs()
         reward = 0.0
         if detect_collision(self.agent.body_id, self.target_object.body_id):
