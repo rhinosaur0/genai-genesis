@@ -5,9 +5,6 @@ from flask import Flask, jsonify
 from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
 
-app = Flask(__name__)
-
-@app.route('/train', methods=['GET'])
 def train():
     env = gym.make('Ant-v4')
 
@@ -25,5 +22,4 @@ def train():
 
     return jsonify({"message": "Training completed but reward not reached", "mean_reward": mean_reward})
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000)
+
