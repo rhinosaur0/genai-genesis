@@ -1,28 +1,29 @@
 import gymnasium as gym
 import torch
+from flask import Flask, jsonify
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.evaluation import evaluate_policy
 
-# Create environment
-# env = gym.make('LunarLanderContinuous-v2')
+app = Flask(__name__)
 
-env = gym.make('Ant-v4')
-# env.render(mode="human")
+@app.route('/train', methods=['GET'])
+def train():
+    env = gym.make('Ant-v4')
 
-policy_kwargs = dict(activation_fn=torch.nn.LeakyReLU, net_arch=[512, 512])
-# Instantiate the agent
-model = PPO('MlpPolicy', env,learning_rate=0.0003,policy_kwargs=policy_kwargs, verbose=1)
-# Train the agent
-for i in range(8000):
-    print("Training itteration ",i)
-    model.learn(total_timesteps=10000, tb_log_name="PPO_Ant")
-    # Save the agent
-    model.save("../model/ppo_Ant")
-    mean_reward, std_reward = evaluate_policy(model, model.get_env(), n_eval_episodes=5)
-    print("mean_reward ", mean_reward)
-    if mean_reward >= 270:
-        print("***Agent Trained with average reward ", mean_reward)
-        break
+    policy_kwargs = dict(activation_fn=torch.nn.LeakyReLU, net_arch=[512, 512])
+    model = PPO('MlpPolicy', env, learning_rate=0.0003, policy_kwargs=policy_kwargs, verbose=1)
 
-del model  # delete trained model to demonstrate loading
+    for i in range(8000):
+        print("Training iteration", i)
+        model.learn(total_timesteps=10000, tb_log_name="PPO_Ant")
+        model.save("ppo_Ant")
+        mean_reward, _ = evaluate_policy(model, model.get_env(), n_eval_episodes=5)
+
+        if mean_reward >= 270:
+            return jsonify({"message": "Agent trained", "mean_reward": mean_reward})
+
+    return jsonify({"message": "Training completed but reward not reached", "mean_reward": mean_reward})
+
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=5000)
