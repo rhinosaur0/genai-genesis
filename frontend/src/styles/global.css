@@ -1,0 +1,83 @@
+:root {
+  --color-background: #13111a;
+  --color-primary: #7b68ee;
+  --color-secondary: #6a5acd;
+  --color-text: #f5f5f7;
+  --color-text-secondary: #b3b3b7;
+  --color-card-bg: rgba(30, 27, 38, 0.7);
+  --color-card-border: rgba(123, 104, 238, 0.3);
+  --color-translucent: rgba(123, 104, 238, 0.15);
+  --color-translucent-hover: rgba(123, 104, 238, 0.25);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Montserrat', sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+button {
+  font-family: 'Montserrat', sans-serif;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.glass-card {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12px;
+  box-shadow: var(--shadow-soft);
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-secondary);
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  background-color: var(--color-translucent);
+  color: var(--color-text);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 500;
+  border: 1px solid var(--color-card-border);
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-translucent-hover);
+  transform: translateY(-2px);
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, var(--color-primary), #9370db);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+} 

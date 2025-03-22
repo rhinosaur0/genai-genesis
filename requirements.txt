@@ -1,4 +1,3 @@
 pybullet
-pybullet_data
 trimesh
 numpy
