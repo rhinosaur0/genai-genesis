@@ -1,9 +1,10 @@
-from typing import List, Tuple, Dict, Any
-from fastapi import FastAPI, Depends
+from typing import List
+from fastapi import FastAPI, Depends, requests
 from pydantic import BaseModel
 import uvicorn
 from pybullet_env.env import BulletEnv
-from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+
 import socketio
 import os
 import xml.etree.ElementTree as ET
@@ -12,8 +13,21 @@ from kubernetes import client, config
 
 app = FastAPI()
 sio = socketio.AsyncServer(async_mode='asgi')
-socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
+app.mount("/socket.io", socketio.ASGIApp(sio))
+
+app.add_middleware(
+    CORSMiddleware,
+    cors_allowed_origins = []
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins='*',
+    allow_credentials = True,
+    allow_methods = ["GET", "POST"],
+    allow_headers = ["*"]
+)
 # Pydantic models for input validation
 class FilenamePayload(BaseModel):
     filename: str
@@ -37,30 +51,7 @@ URDF_DIR = os.path.join(os.getcwd(), "urdf")
 os.makedirs(OBJ_DIR, exist_ok=True)
 os.makedirs(URDF_DIR, exist_ok=True)
 
-class Trainer:
-    def __init__(self, env, max_steps=1000):
-        self.env = env
-        self.max_steps = max_steps
-    
-    def train(self):
-        obs = self.env.reset()
-        done = False
-        step_count = 0
-        total_reward = 0
-        
-        while not done and step_count < self.max_steps:
-            # For now using a simple action (0), this would be replaced with your agent's policy
-            action = 0  
-            obs, reward, done, info = self.env.step(action)
-            total_reward += reward
-            step_count += 1
-            
-            if reward == 1:
-                print(f"Collision detected at step {step_count}. Reward: {reward}")
-                break
-        
-        print(f"Training finished after {step_count} steps. Total reward: {total_reward}")
-        return {"steps": step_count, "total_reward": total_reward, "done": done}
+
 
 def get_session_id(request: Request):
     return request.headers.get("session-id", str(uuid.uuid4()))
@@ -281,4 +272,4 @@ async def update_live_position(sid, data):
     await sio.emit("state_update", {"status": "position_updated"}, to=sid)
 
 if __name__ == "__main__":
-    uvicorn.run(socket_app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

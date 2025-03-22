@@ -1,9 +1,6 @@
 import pybullet as p
-<<<<<<< HEAD
 import xml.etree.ElementTree as ET
-=======
 import os
->>>>>>> 1a9c242a7bb9c7e13129b30a0dd009683be81864
 
 
 class GeneralObject:
