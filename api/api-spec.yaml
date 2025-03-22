@@ -1,0 +1,54 @@
+swagger: "2.0"
+info:
+  title: "Genai Genesis API Gateway"
+  description: "API Gateway for object creation, environment definition, and agent training."
+  version: "1.0.2"
+schemes:
+  - "https"
+paths:
+  /:
+    get:
+      description: "Test the API Gateway."
+      operationId: "home"
+      responses:
+        200:
+          description: "Hello, world!"
+  /objects/{object_name}:
+    put:
+      description: "Upload an object to Cloud Storage."
+      operationId: "uploadObject"
+      parameters:
+        - name: object_name
+          in: path
+          required: true
+          type: string
+      consumes:
+        - "application/octet-stream"
+      responses:
+        200:
+          description: "Object uploaded successfully."
+        500:
+          description: "Internal server error."
+      x-google-backend:
+        address: "https://latest---object-storage-264982520588.northamerica-northeast2.run.app"
+        jwt_audience: "https://object-storage-264982520588.northamerica-northeast2.run.app"
+    get:
+      description: "Download an object from Cloud Storage."
+      operationId: "downloadObject"
+      parameters:
+        - name: object_name
+          in: path
+          required: true
+          type: string
+      produces:
+        - "application/octet-stream"
+      responses:
+        200:
+          description: "Object downloaded successfully."
+        404:
+          description: "Object not found."
+        500:
+          description: "Internal server error."
+      x-google-backend:
+        address: "https://latest---object-storage-264982520588.northamerica-northeast2.run.app"
+        jwt_audience: "https://object-storage-264982520588.northamerica-northeast2.run.app"
