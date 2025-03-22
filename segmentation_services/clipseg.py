@@ -11,8 +11,8 @@ def segment_with_prompt(prompts):
     model = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
 
     # Load image
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    url = "C:\\Advey\\genai-genesis\\segmentation\\IMG_3400.jpg"
+    image = Image.open(url)
 
     # Process inputs
     inputs = processor(text=prompts, images=[image] * len(prompts), padding=True, return_tensors="pt")
@@ -60,4 +60,4 @@ def segment_with_prompt(prompts):
         mask_image.save(f"{prompt.replace(' ', '_')}_mask.png")
 
 if __name__ == "__main__":
-    segment_with_prompt(["a cat", "a remote", "a blanket"])
+    segment_with_prompt(["a chair", "a box", "a table"])

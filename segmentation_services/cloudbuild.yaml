@@ -1,0 +1,35 @@
+# cloudbuild.yaml for building and deploying clipseg project
+
+steps:
+  # Step 1: Build the Docker image and tag it
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/capable-hash-454519-c1/clipseg-image'  # Replace with your project ID
+      - 'C:/Advey/genai-genesis/segmentation'  # Path to the directory with your Dockerfile
+
+  # Step 2: Push the Docker image to Google Container Registry (GCR)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/capable-hash-454519-c1/clipseg-image'  # Replace with your project ID
+
+  # Optional Step 3: Deploy the Docker container to Google Cloud Run (Optional)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args:
+      - 'gcloud'
+      - 'run'
+      - 'deploy'
+      - 'clipseg-image'  # Deployment name
+      - '--image'
+      - 'gcr.io/capable-hash-454519-c1/clipseg-image'  # Use the image built and pushed in previous steps
+      - '--platform'
+      - 'managed'
+      - '--region'
+      - 'us-central1'  # Specify the region
+      - '--allow-unauthenticated'  # Optional, if you want to allow public access
+
+# Define the images that will be produced and stored in Container Registry
+images:
+  - 'gcr.io/capable-hash-454519-c1/clipseg-image'
