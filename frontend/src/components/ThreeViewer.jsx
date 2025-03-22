@@ -1,6 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Environment, useGLTF, PerspectiveCamera, Grid } from '@react-three/drei';
+import React, { useRef, useState, useEffect } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import styled from 'styled-components';
 
@@ -22,12 +22,7 @@ const LoadingOverlay = styled.div`
   justify-content: center;
   align-items: center;
   z-index: 10;
-  color: var(--color-text);
-  
-  h3 {
-    margin-bottom: 1rem;
-    font-size: 1.5rem;
-  }
+  color: #f5f5f7;
 `;
 
 const SpinnerContainer = styled.div`
@@ -36,7 +31,7 @@ const SpinnerContainer = styled.div`
   height: 50px;
   border: 3px solid rgba(123, 104, 238, 0.3);
   border-radius: 50%;
-  border-top-color: var(--color-primary);
+  border-top-color: #7b68ee;
   animation: spin 1s ease-in-out infinite;
   
   @keyframes spin {
@@ -44,53 +39,35 @@ const SpinnerContainer = styled.div`
   }
 `;
 
-// Dynamic model component that adapts to the provided URL
-function Model({ url, setIsLoading }) {
-  const group = useRef();
-  
-  // For demo purposes, as we don't have a real GLB, create a sphere
-  const { scene } = useThree();
-  
-  React.useEffect(() => {
-    // Create a placeholder model (sphere) for demonstration
-    const geometry = new THREE.SphereGeometry(2, 32, 32);
-    const material = new THREE.MeshStandardMaterial({ 
-      color: '#7b68ee',
-      metalness: 0.3,
-      roughness: 0.4,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    
-    if (group.current) {
-      group.current.add(mesh);
-    }
-    
-    // Simulate loading
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1500);
-    
-    return () => {
-      geometry.dispose();
-      material.dispose();
-    };
-  }, [setIsLoading]);
-  
-  // In a real implementation, you would use:
-  // const { scene, nodes, materials } = useGLTF(url)
-  // useEffect(() => { setIsLoading(false) }, [scene])
+// Simple sphere model
+function SimpleModel() {
+  const meshRef = useRef();
   
   useFrame(() => {
-    if (group.current) {
-      group.current.rotation.y += 0.001;
+    if (meshRef.current) {
+      meshRef.current.rotation.y += 0.01;
     }
   });
   
-  return <group ref={group} />;
+  return (
+    <mesh ref={meshRef}>
+      <sphereGeometry args={[2, 32, 32]} />
+      <meshStandardMaterial color="#7b68ee" metalness={0.3} roughness={0.4} />
+    </mesh>
+  );
 }
 
 function ThreeViewer({ modelUrl }) {
   const [isLoading, setIsLoading] = useState(true);
+  
+  useEffect(() => {
+    // Simulate loading delay
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, []);
   
   return (
     <CanvasContainer>
@@ -101,31 +78,12 @@ function ThreeViewer({ modelUrl }) {
         </LoadingOverlay>
       )}
       
-      <Canvas shadows>
+      <Canvas>
         <PerspectiveCamera makeDefault position={[0, 2, 8]} />
-        
         <ambientLight intensity={0.5} />
-        <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
-        <pointLight position={[-10, -10, -10]} intensity={0.5} />
-        
-        <Model url={modelUrl} setIsLoading={setIsLoading} />
-        
-        <Grid
-          infiniteGrid
-          cellSize={0.6}
-          cellThickness={0.6}
-          cellColor="#6a5acd"
-          sectionSize={3}
-          sectionThickness={1}
-          sectionColor="#7b68ee"
-          fadeDistance={30}
-          fadeStrength={1}
-          followCamera={false}
-          position={[0, -2, 0]}
-        />
-        
-        <Environment preset="city" />
-        <OrbitControls makeDefault />
+        <pointLight position={[10, 10, 10]} />
+        <SimpleModel />
+        <OrbitControls />
       </Canvas>
     </CanvasContainer>
   );

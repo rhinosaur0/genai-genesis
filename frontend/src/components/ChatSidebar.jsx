@@ -6,15 +6,13 @@ const SidebarContainer = styled.div`
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--color-card-bg);
-  border-left: 1px solid var(--color-card-border);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(30, 27, 38, 0.7);
+  border-left: 1px solid rgba(123, 104, 238, 0.3);
 `;
 
 const ChatHeader = styled.div`
   padding: 1rem;
-  border-bottom: 1px solid var(--color-card-border);
+  border-bottom: 1px solid rgba(123, 104, 238, 0.3);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -22,6 +20,7 @@ const ChatHeader = styled.div`
   h3 {
     font-size: 1.1rem;
     font-weight: 600;
+    color: #f5f5f7;
   }
 `;
 
@@ -32,46 +31,27 @@ const ChatMessages = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  
-  &::-webkit-scrollbar-thumb {
-    background: var(--color-card-border);
-    border-radius: 3px;
-  }
 `;
 
 const Message = styled.div`
   padding: 0.8rem 1rem;
   border-radius: 12px;
   max-width: 90%;
-  
-  ${props => props.isUser ? `
-    background: var(--color-translucent);
-    align-self: flex-end;
-    border-bottom-right-radius: 4px;
-  ` : `
-    background: rgba(50, 50, 70, 0.5);
-    align-self: flex-start;
-    border-bottom-left-radius: 4px;
-  `}
+  background: ${props => props.isUser ? 'rgba(123, 104, 238, 0.15)' : 'rgba(50, 50, 70, 0.5)'};
+  align-self: ${props => props.isUser ? 'flex-end' : 'flex-start'};
+  border-bottom-right-radius: ${props => props.isUser ? '4px' : '12px'};
+  border-bottom-left-radius: ${props => props.isUser ? '12px' : '4px'};
 `;
 
 const MessageText = styled.p`
   font-size: 0.9rem;
   line-height: 1.4;
-  color: var(--color-text);
+  color: #f5f5f7;
 `;
 
 const ChatInputContainer = styled.div`
   padding: 1rem;
-  border-top: 1px solid var(--color-card-border);
+  border-top: 1px solid rgba(123, 104, 238, 0.3);
 `;
 
 const ChatInputForm = styled.form`
@@ -82,15 +62,15 @@ const ChatInputForm = styled.form`
 const ChatInput = styled.input`
   flex: 1;
   padding: 0.8rem 1rem;
-  border: 1px solid var(--color-card-border);
+  border: 1px solid rgba(123, 104, 238, 0.3);
   border-radius: 8px;
   background: rgba(30, 27, 38, 0.5);
-  color: var(--color-text);
+  color: #f5f5f7;
   font-family: 'Montserrat', sans-serif;
   
   &:focus {
     outline: none;
-    border-color: var(--color-primary);
+    border-color: #7b68ee;
   }
 `;
 
@@ -101,12 +81,13 @@ const SendButton = styled.button`
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: var(--color-primary);
+  background: #7b68ee;
   color: white;
-  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
   
   &:hover {
-    background: var(--color-secondary);
+    background: #6a5acd;
   }
   
   &:disabled {
@@ -121,9 +102,8 @@ function ChatSidebar({ modelPrompt }) {
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Add initial AI greeting when the component mounts
+  // Add initial AI greeting
   useEffect(() => {
-    // Initial greeting from the AI
     const aiGreeting = `Hello! I'm your 3D model assistant. I can help you understand and interact with this model. What would you like to know?`;
     
     setTimeout(() => {
@@ -156,22 +136,11 @@ function ChatSidebar({ modelPrompt }) {
     // Simulate AI typing
     setIsTyping(true);
     
-    // Simulate AI response after a delay
+    // Simulate AI response
     setTimeout(() => {
-      // Example AI responses - in a real app this would come from your backend
-      const aiResponses = [
-        `I see you're interested in this model. What specific details would you like to explore?`,
-        `That's an interesting question about the model. The texture details are particularly notable in this area.`,
-        `You can rotate the model by clicking and dragging. Try exploring it from different angles!`,
-        `This model was created based on your prompt: "${modelPrompt}". Is there anything specific about it you'd like to discuss?`,
-        `The lighting in this scene really brings out the details of the model's surface texture.`
-      ];
+      const aiResponse = `I understand you're asking about "${inputValue}". The model was created based on the prompt: "${modelPrompt || 'your specified criteria'}"`;
       
-      // Randomly select a response
-      const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
-      
-      // Add AI response
-      setMessages(prev => [...prev, { text: randomResponse, isUser: false }]);
+      setMessages(prev => [...prev, { text: aiResponse, isUser: false }]);
       setIsTyping(false);
     }, 1500);
   };

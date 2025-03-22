@@ -9,12 +9,10 @@ const ToolbarContainer = styled.div`
   display: flex;
   align-items: center;
   padding: 0.5rem;
-  background: var(--color-card-bg);
-  border: 1px solid var(--color-card-border);
-  backdrop-filter: blur(10px);
+  background: rgba(30, 27, 38, 0.7);
+  border: 1px solid rgba(123, 104, 238, 0.3);
   border-radius: 12px;
   z-index: 10;
-  box-shadow: var(--shadow-soft);
 `;
 
 const ButtonGroup = styled.div`
@@ -31,19 +29,14 @@ const ToolbarButton = styled.button`
   border-radius: 8px;
   font-weight: 500;
   font-size: 0.9rem;
-  transition: all 0.2s ease;
+  background-color: ${props => props.active ? '#7b68ee' : 'transparent'};
+  color: ${props => props.active ? 'white' : '#f5f5f7'};
+  cursor: pointer;
+  border: none;
   
-  ${props => props.active ? `
-    background-color: var(--color-primary);
-    color: white;
-  ` : `
-    background-color: transparent;
-    color: var(--color-text);
-    
-    &:hover {
-      background-color: var(--color-translucent);
-    }
-  `}
+  &:hover {
+    background-color: ${props => props.active ? '#7b68ee' : 'rgba(123, 104, 238, 0.15)'};
+  }
 `;
 
 const ButtonIcon = styled.span`
