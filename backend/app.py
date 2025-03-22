@@ -1,4 +1,4 @@
-
+from typing import List, Tuple
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -22,6 +22,15 @@ global_inputs = {
     "target_position": [2, 2, 2]
 }
 
+# Initial endpoint to create the environment
+
+
+
+@app.post("/create_initial_env")
+def create_initial_env(payload: List[Tuple[FilenamePayload, PositionPayload]]):
+
+    return {"status": "Environment created."}
+
 @app.post("/upload_filename")
 def upload_filename(payload: FilenamePayload):
     global_inputs["target_filename"] = payload.filename
@@ -37,11 +46,6 @@ def upload_position(payload: PositionPayload):
 def begin_training():
     if global_inputs["target_filename"] is not None and global_inputs["target_position"] is not None:
         print("Both inputs received. Starting training...")
-        train()
-    return {"status": "Position received."}
-
-def train():
-    """Create the environment, run a training loop until reward=1 (collision detected), then exit."""
     env = BulletEnv(
         target_filename=global_inputs["target_filename"],
         target_position=global_inputs["target_position"]
@@ -55,6 +59,7 @@ def train():
         if reward == 1:
             print(f"Collision detected at step {step_count}. Reward: {reward}")
             break
+
     env.close()
     print("Training finished. Exiting.")
 
