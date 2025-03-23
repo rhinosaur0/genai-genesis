@@ -7,14 +7,14 @@ spec:
     spec:
       containers:
         - name: trainer
-          image: northamerica-northeast2-docker.pkg.dev/elated-emitter-454512-q9/cloud-run/trainer:latest
+          image: northamerica-northeast2-docker.pkg.dev/elated-emitter-454512-q9/kube/trainer:latest
           resources:
             requests:
-              cpu: "2"
-              memory: "4Gi"
-            limits:
               cpu: "4"
               memory: "8Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
           env:
             - name: BUCKET_NAME
               value: "genai-genesis-storage"
