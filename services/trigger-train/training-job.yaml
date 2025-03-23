@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rl-training-job
+spec:
+  template:
+    spec:
+      containers:
+        - name: trainer
+          image: northamerica-northeast2-docker.pkg.dev/elated-emitter-454512-q9/kube/trainer
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+          env:
+            - name: BUCKET_NAME
+              value: "genai-genesis-storage"
+          volumeMounts:
+            - name: sa-key
+              mountPath: "/secrets/sa-key"
+              readOnly: true
+      volumes:
+        - name: sa-key
+          secret:
+            secretName: gcp-sa-key
+      restartPolicy: Never
+  backoffLimit: 0
