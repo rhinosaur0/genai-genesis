@@ -2,8 +2,8 @@ import os
 import glob
 import json
 import base64
-import tempfile
 import xml.etree.ElementTree as ET
+
 
 import socketio
 from fastapi import FastAPI
@@ -41,13 +41,11 @@ def read_root():
 def get_environment_config(environment_id):
     """Get environment configuration from GCP bucket"""
     bucket = storage_client.bucket(BUCKET_NAME)
-    blob = bucket.blob(f"environments/{environment_id}/config.json")
+    blob = bucket.blob(f"{environment_id}/config.json")
     
     # Download as string and parse JSON
     content = blob.download_as_string()
     return json.loads(content)
-
-
 
 def render_environment(env_name):
     """
@@ -254,7 +252,7 @@ def start_training_process(env_name):
         except Exception as e:
             print(f"Error processing {urdf_file}: {e}")
     # Create an agent.
-    agent = AgentBall(name="agent", start_pos=[0, 0, 1], radius=0.2)
+    agent = AgentBall(start_pos=[0, 0, 1], radius=0.2)
     # Build the environment with all objects.
     env = MultiObjectBulletEnv(objects=objects, agent=agent)
     # Create the trainer and start training.
@@ -264,197 +262,6 @@ def start_training_process(env_name):
     env.render()
     return training_result
 
-
-
-
-# @app.route('/render_environment', methods=['POST'])
-# def render_environment():
-#     """
-#     Render the environment and return a 3D model file (GLB) for frontend viewing.
-    
-#     Expected request format:
-#     {
-#         "environment_id": "env_123",
-#         "width": 1024,           # Optional: width of the viewport
-#         "height": 768,           # Optional: height of the viewport
-#         "camera_position": [x,y,z],  # Optional: camera position
-#         "target_position": [x,y,z]   # Optional: camera target
-#     }
-#     """
-#     request_data = request.get_json()
-#     environment_id = request_data.get('environment_id')
-    
-#     if not environment_id:
-#         return jsonify({'error': 'Missing environment_id'}), 400
-    
-#     # Get optional parameters with defaults
-#     width = request_data.get('width', 1024)
-#     height = request_data.get('height', 768)
-#     camera_position = request_data.get('camera_position', [3, 3, 3])
-#     target_position = request_data.get('target_position', [0, 0, 0])
-    
-#     try:
-#         # Get environment config (list of objects) from GCP
-#         environment_config = get_environment_config(environment_id)
-#         object_list = environment_config.get('objects', [])
-        
-#         if not object_list:
-#             return jsonify({'error': 'No objects found for this environment'}), 404
-        
-#         # Connect to PyBullet with GUI for rendering (we'll make it offscreen)
-#         p.connect(p.GUI, options="--width={} --height={} --opengl2".format(width, height))
-#         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
-#         p.configureDebugVisualizer(p.COV_ENABLE_SHADOWS, 1)
-        
-#         # Set up the scene
-#         p.setGravity(0, 0, -9.81)  # Set gravity
-        
-#         # Load each object
-#         loaded_obj_ids = []
-#         for obj_info in object_list:
-#             obj_id = obj_info['id']
-#             try:
-#                 # Download the object file from GCP
-#                 object_path, _, file_type = download_from_gcp(obj_id)
-                
-#                 # Load the object into PyBullet with position/orientation if provided
-#                 position = obj_info.get('position', [0, 0, 0])
-#                 orientation = obj_info.get('orientation', [0, 0, 0, 1])
-                
-#                 if file_type == 'urdf':
-#                     pb_obj_id = p.loadURDF(object_path, position, orientation)
-#                 elif file_type == 'sdf':
-#                     pb_obj_id = p.loadSDF(object_path)
-#                 elif file_type == 'mjcf':
-#                     pb_obj_id = p.loadMJCF(object_path)
-#                 elif file_type == 'obj':
-#                     visual_shape_id = p.createVisualShape(
-#                         shapeType=p.GEOM_MESH,
-#                         fileName=object_path
-#                     )
-#                     pb_obj_id = p.createMultiBody(
-#                         baseMass=0,
-#                         basePosition=position,
-#                         baseOrientation=orientation,
-#                         baseVisualShapeIndex=visual_shape_id
-#                     )
-#                 else:
-#                     # Skip unsupported files
-#                     continue
-                
-#                 loaded_obj_ids.append(pb_obj_id)
-                
-#                 # Clean up the temp file
-#                 os.unlink(object_path)
-                
-#             except Exception as e:
-#                 print(f"Error loading object {obj_id}: {str(e)}")
-        
-#         # Allow the scene to settle (run physics for a short time)
-#         for _ in range(10):
-#             p.stepSimulation()
-        
-#         # Set up the camera view
-#         view_matrix = p.computeViewMatrix(
-#             cameraEyePosition=camera_position,
-#             cameraTargetPosition=target_position,
-#             cameraUpVector=[0, 0, 1]
-#         )
-        
-#         projection_matrix = p.computeProjectionMatrixFOV(
-#             fov=60.0,
-#             aspect=float(width)/height,
-#             nearVal=0.01,
-#             farVal=100.0
-#         )
-        
-#         # Create a temp directory for the output
-#         with tempfile.TemporaryDirectory() as temp_dir:
-#             # Export the scene to an OBJ file
-#             obj_filename = os.path.join(temp_dir, "rendered_scene.obj")
-            
-#             # Method 1: Use PyBullet's export function
-#             p.exportMesh(obj_filename, loaded_obj_ids[0] if loaded_obj_ids else -1)
-            
-#             # Convert OBJ to GLB (better for web viewing)
-#             try:
-#                 mesh = trimesh.load(obj_filename)
-#                 glb_filename = os.path.join(temp_dir, "rendered_scene.glb")
-#                 mesh.export(glb_filename)
-                
-#                 # Read the GLB file and encode to base64
-#                 with open(glb_filename, "rb") as f:
-#                     glb_content = f.read()
-#                     glb_base64 = base64.b64encode(glb_content).decode('utf-8')
-                
-#                 # Disconnect from PyBullet
-#                 p.disconnect()
-                
-#                 # Return the GLB file as base64 along with rendering metadata
-#                 response = {
-#                     'environment_id': environment_id,
-#                     'format': 'glb',
-#                     'content': glb_base64,
-#                     'width': width,
-#                     'height': height,
-#                     'camera_position': camera_position,
-#                     'target_position': target_position
-#                 }
-                
-#                 return jsonify(response)
-                
-#             except Exception as e:
-#                 # If trimesh fails, try an alternative approach with screenshots
-#                 print(f"Failed to convert to GLB: {str(e)}")
-                
-#                 # Take a few screenshots from different angles
-#                 screenshots = []
-#                 for angle in range(0, 360, 45):
-#                     # Rotate camera around the scene
-#                     rad = angle * np.pi / 180.0
-#                     radius = 5.0
-#                     camera_pos = [radius * np.cos(rad), radius * np.sin(rad), 3]
-                    
-#                     view_matrix = p.computeViewMatrix(
-#                         cameraEyePosition=camera_pos,
-#                         cameraTargetPosition=[0, 0, 0],
-#                         cameraUpVector=[0, 0, 1]
-#                     )
-                    
-#                     # Render
-#                     img = p.getCameraImage(width, height, view_matrix, projection_matrix)
-                    
-#                     # Convert the raw RGBA to a PNG image
-#                     rgba = np.array(img[2], dtype=np.uint8).reshape((height, width, 4))
-#                     rgb = rgba[:,:,:3]  # Extract RGB
-                    
-#                     # Save to memory buffer
-#                     img_buffer = io.BytesIO()
-#                     Image.fromarray(rgb).save(img_buffer, format='PNG')
-#                     img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-#                     screenshots.append({
-#                         'angle': angle,
-#                         'image': img_base64
-#                     })
-                
-#                 # Disconnect from PyBullet
-#                 p.disconnect()
-                
-#                 # Return the screenshots as a fallback
-#                 response = {
-#                     'environment_id': environment_id,
-#                     'format': 'images',
-#                     'screenshots': screenshots,
-#                     'width': width,
-#                     'height': height
-#                 }
-                
-#                 return jsonify(response)
-                
-#     except Exception as e:
-#         if p.isConnected():
-#             p.disconnect()
-#         return jsonify({'error': str(e)}), 500
 
 
 if __name__ == "__main__":
