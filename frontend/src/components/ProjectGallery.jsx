@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../utils/AuthContext';
 import { getUserEnvironments, createEnvironment, deleteEnvironment } from '../utils/firebase';
-import { io } from 'socket.io-client';
+import axios from 'axios';
+import RenderPreview from './RenderPreview';
 import * as THREE from 'three';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
+import { io } from 'socket.io-client';
 
 const spin = keyframes`
   0% { transform: rotate(0deg); }
@@ -633,6 +635,8 @@ const ProjectGallery = ({ onSelectProject }) => {
   const [projectDescription, setProjectDescription] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [renderedImage, setRenderedImage] = useState(null);
+  const [showRenderPreview, setShowRenderPreview] = useState(false);
   const fileInputRef = useRef(null);
   const [objectFiles, setObjectFiles] = useState({});
   const [showObjectTest, setShowObjectTest] = useState(false);
@@ -982,7 +986,8 @@ const ProjectGallery = ({ onSelectProject }) => {
 
     if (selectedImage) {
       try {
-        console.log("Uploading filename to backend:", selectedImage.name);
+        setIsCreatingProject(true);
+        console.log("Uploading image to backend for processing:", selectedImage.name);
         
         // Create the payload with both filename and user ID
         const filenamePayload = {
@@ -995,18 +1000,22 @@ const ProjectGallery = ({ onSelectProject }) => {
       } catch (uploadError) {
         console.error("Error uploading filename:", uploadError);
       }
+    } else {
+      setError("Please select an image to upload");
     }
-    
+  };
+  
+  const handleContinueAfterPreview = async () => {
     try {
       setIsCreatingProject(true);
       console.log("Creating new project for user:", currentUser.uid);
       
-      // In a real application, you would upload the image to storage
-      // Here we'll just use the data URL for demonstration
+      // Use the rendered image from the backend as the thumbnail
       const projectData = {
         name: projectName || `Project ${projects.length + 1}`,
         description: projectDescription || 'New 3D environment project',
-        thumbnail: imagePreview, // In a real app, this would be a storage URL
+        thumbnail: imagePreview, // Use the original image preview as thumbnail
+        rendered_image: renderedImage, // Store the rendered image from backend
         model_url: '/models/sample.obj' // Default sample model
       };
       
@@ -1017,8 +1026,10 @@ const ProjectGallery = ({ onSelectProject }) => {
         // Fetch updated projects
         await fetchProjects();
         
-        // Close modal
+        // Close modal and reset state
         setShowCreateModal(false);
+        setShowRenderPreview(false);
+        setRenderedImage(null);
         
         // Find the newly created project
         const newProject = projects.find(p => p.id === projectId);
@@ -1475,63 +1486,83 @@ const ProjectGallery = ({ onSelectProject }) => {
               <h2>Create New Project</h2>
               <CloseButton onClick={handleCloseModal}>&times;</CloseButton>
             </ModalHeader>
-            <Form onSubmit={handleSubmitNewProject}>
-              <FormGroup>
-                <Label htmlFor="projectName">Project Name</Label>
-                <Input 
-                  id="projectName"
-                  type="text"
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="Enter project name"
-                  required
-                />
-              </FormGroup>
-              <FormGroup>
-                <Label htmlFor="projectDescription">Prompt</Label>
-                <TextArea 
-                  id="projectDescription"
-                  value={projectDescription}
-                  onChange={(e) => setProjectDescription(e.target.value)}
-                  placeholder="Describe what you want to create"
-                />
-              </FormGroup>
-              <FormGroup>
-                <Label>Image Prompt</Label>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  style={{ display: 'none' }}
-                  accept="image/*"
-                  onChange={handleFileChange}
-                />
-                <FileUploadArea 
-                  onClick={handleFileUploadClick}
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                >
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="rgba(123, 104, 238, 0.5)"
-                    style={{ width: '48px', height: '48px' }}
+            
+            {showRenderPreview ? (
+              <RenderPreviewOverlay>
+                <div>
+                  <RenderPreview 
+                    base64Image={renderedImage} 
+                    title="AI Generated Environment Preview"
+                    onContinue={handleContinueAfterPreview}
+                  />
+                </div>
+              </RenderPreviewOverlay>
+            ) : (
+              <Form onSubmit={handleSubmitNewProject}>
+                <FormGroup>
+                  <Label htmlFor="projectName">Project Name</Label>
+                  <Input 
+                    id="projectName"
+                    type="text"
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="Enter project name"
+                    required
+                  />
+                </FormGroup>
+                <FormGroup>
+                  <Label htmlFor="projectDescription">Prompt</Label>
+                  <TextArea 
+                    id="projectDescription"
+                    value={projectDescription}
+                    onChange={(e) => setProjectDescription(e.target.value)}
+                    placeholder="Describe what you want to create"
+                  />
+                </FormGroup>
+                <FormGroup>
+                  <Label>Image Prompt</Label>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    accept="image/*"
+                    onChange={handleFileChange}
+                  />
+                  <FileUploadArea 
+                    onClick={handleFileUploadClick}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
                   >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth={2} 
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
-                    />
-                  </svg>
-                  <p>Upload an image that will be used as project thumbnail</p>
-                  {imagePreview && <ImagePreview src={imagePreview} alt="Preview" />}
-                </FileUploadArea>
-              </FormGroup>
-              <SubmitButton type="submit" disabled={isCreatingProject}>
-                {isCreatingProject ? 'Creating...' : 'Create Project'}
-              </SubmitButton>
-            </Form>
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="rgba(123, 104, 238, 0.5)"
+                      style={{ width: '48px', height: '48px' }}
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" 
+                      />
+                    </svg>
+                    <p>Upload an image that will be used as project thumbnail</p>
+                    {imagePreview && <ImagePreview src={imagePreview} alt="Preview" />}
+                  </FileUploadArea>
+                </FormGroup>
+                <SubmitButton type="submit" disabled={isCreatingProject}>
+                  {isCreatingProject ? (
+                    <>
+                      <LoadingSpinner />
+                      Processing...
+                    </>
+                  ) : (
+                    'Generate Project'
+                  )}
+                </SubmitButton>
+              </Form>
+            )}
           </ModalContent>
         </Modal>
       )}

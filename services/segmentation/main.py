@@ -2,6 +2,9 @@ from PIL import Image
 from transformers import AutoProcessor, CLIPSegForImageSegmentation
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 import io
 import base64
 from typing import List, Dict
@@ -22,58 +25,97 @@ class SegmentationService:
         self.model.to(self.device)
         self.model.eval()  # Set model to evaluation mode
 
-    def process_image(self, image_bytes: bytes, prompts: List[str], threshold: float = 0.8) -> Dict:
+    def process_image(self, image_bytes: bytes, prompts: List[str], threshold: float = 0.8, return_highlighted: bool = True) -> Dict:
         try:
             # Load image from bytes
-            image = Image.open(io.BytesIO(image_bytes))
-            
+            original_image = Image.open(io.BytesIO(image_bytes))
+
             # Process inputs
             inputs = self.processor(
                 text=prompts, 
-                images=[image] * len(prompts), 
-                padding=True, 
+                images=[original_image] * len(prompts),
                 return_tensors="pt"
             )
             
-            # Move inputs to the same device as model
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
             # Get segmentation masks
             with torch.no_grad():
                 outputs = self.model(**inputs)
-                predicted_masks = outputs.logits.sigmoid()
+                predicted_masks = outputs.logits  # Shape: (batch_size, height, width)
 
-            # Convert masks to binary format and then to base64
-            mask_results = []
+            # Create single figure for overlaid visualization
+            plt.figure(figsize=(10, 10))
+            plt.imshow(original_image)
+            
+            colors = ['red', 'green', 'blue', 'yellow', 'magenta', 'cyan']
+            color_dict = {
+                'red': [1, 0, 0, 0.3],
+                'green': [0, 1, 0, 0.3],
+                'blue': [0, 0, 1, 0.3],
+                'yellow': [1, 1, 0, 0.3],
+                'magenta': [1, 0, 1, 0.3],
+                'cyan': [0, 1, 1, 0.3]
+            }
+            
+            # Overlay each mask with different colors
             for i, (mask, prompt) in enumerate(zip(predicted_masks, prompts)):
-                # Move mask to CPU and convert to numpy
-                mask_np = mask.cpu().numpy()
+                # Apply sigmoid and get mask
+                mask_np = mask.sigmoid().cpu().numpy()
                 
-                # Create binary mask
-                binary_mask = (mask_np > threshold).astype(np.uint8) * 255
+                # Resize mask if needed
+                if mask_np.shape != (original_image.height, original_image.width):
+                    mask_np = np.array(Image.fromarray(mask_np).resize(
+                        (original_image.width, original_image.height)
+                    ))
                 
-                # Convert to PIL Image and then to base64
-                mask_image = Image.fromarray(binary_mask)
-                buffer = io.BytesIO()
-                mask_image.save(buffer, format="PNG")
-                base64_mask = base64.b64encode(buffer.getvalue()).decode()
+                # Overlay mask with current color
+                color = colors[i % len(colors)]
+                colored_mask = np.zeros((*mask_np.shape, 4))
+                colored_mask[mask_np > threshold] = color_dict[color]
+                plt.imshow(colored_mask)
                 
-                mask_results.append({
-                    "prompt": prompt,
-                    "mask": base64_mask
-                })
-
+                # Add to legend
+                plt.plot([], [], label=prompt, color=color)
+            
+            # plt.title("Segmentation Results")
+            plt.axis("off")
+            # plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            
+            # Save visualization
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='PNG', bbox_inches='tight', pad_inches=0)
+            buffer.seek(0)
+            visualization = base64.b64encode(buffer.getvalue()).decode()
+            
+            plt.close()
+            
             return {
                 "status": "success",
-                "masks": mask_results
+                "visualization": visualization
             }
 
         except Exception as e:
             logging.error(f"Error processing image: {str(e)}")
+            plt.close()  # Clean up in case of error
             return {
                 "status": "error",
                 "message": str(e)
             }
+
+    def _mask_to_base64(self, mask_array):
+        """Helper method to convert mask array to base64 string"""
+        mask_image = Image.fromarray(mask_array)
+        buffer = io.BytesIO()
+        mask_image.save(buffer, format="PNG")
+        return base64.b64encode(buffer.getvalue()).decode()
+
+    def _array_to_base64(self, array):
+        """Helper method to convert numpy array to base64 string"""
+        image = Image.fromarray(array.astype(np.uint8), 'RGBA')
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return base64.b64encode(buffer.getvalue()).decode()
 
 # Dont initalize immediatley due to large model size
 segmentation_service = None
@@ -92,13 +134,18 @@ def segment_image_endpoint():
     Expected JSON format:
     {
         "image": "base64_encoded_image_data",
-        "prompts": ["prompt1", "prompt2", ...]
+        "prompts": ["prompt1", "prompt2", ...],
+        "threshold": 0.8  # Optional
+    }
+
+    Returns:
+    {
+        "status": "success" or "error",
+        "visualization": "base64_encoded_image_data"  # Combined visualization of all masks
     }
     """
     try:
-        # This will take a while to load the model
         service = get_segmentation_service()
-
         data = request.get_json()
         
         if not data or 'image' not in data or 'prompts' not in data:
@@ -107,8 +154,6 @@ def segment_image_endpoint():
         # Convert base64 image to bytes
         image_data = base64.b64decode(data['image'])
         prompts = data['prompts']
-        
-        # Get threshold if provided
         threshold = data.get('threshold', 0.8)
         
         # Process the image

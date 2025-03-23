@@ -1,13 +1,20 @@
 import os
-import gymnasium as gym
-import pybullet_envs_gymnasium
+import logging
+from jump_env import BlockJumpEnv
+# import pybullet_envs_gymnasium
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
 from stable_baselines3.common.evaluation import evaluate_policy
 from google.cloud import storage
-import json
-import logging
+import gymnasium as gym
+from gymnasium.envs.registration import register
+
+register(
+    id='BlockJump-v0',
+    entry_point='jump_env:BlockJumpEnv',
+    max_episode_steps=200,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -54,16 +61,16 @@ def train(env_id="HalfCheetahBulletEnv-v0"):
                 tensorboard_log=os.path.join(log_dir, "tensorboard"))
 
     # Train the agent
-    model.learn(total_timesteps=1000, tb_log_name="PPO_ant")
+    model.learn(total_timesteps=1000, tb_log_name="PPO_agent")
 
     # Save the model and normalization stats locally
-    model_path = os.path.join(log_dir, "ppo_ant")
+    model_path = os.path.join(log_dir, "ppo_agent")
     model.save(model_path)
     vec_env.save(stats_path)
 
     try:
         # Upload model and stats to GCS under test-train directory
-        upload_to_gcs(bucket_name, f"{model_path}.zip", "test-train/models/ant_agent_latest.zip")
+        upload_to_gcs(bucket_name, f"{model_path}.zip", "test-train/models/ppo_agent_latest.zip")
         upload_to_gcs(bucket_name, stats_path, "test-train/models/vec_normalize.pkl")
     except Exception as e:
         logger.error(f"Failed to upload model and stats: {e}")
@@ -80,4 +87,4 @@ def train(env_id="HalfCheetahBulletEnv-v0"):
     return model_path
 
 if __name__ == "__main__":
-    train()
+    train('BlockJump-v0')

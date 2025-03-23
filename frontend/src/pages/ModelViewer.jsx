@@ -19,10 +19,10 @@ const ViewerContainer = styled.div`
 const Sidebar = styled.div`
   height: 100vh;
   width: ${props => props.width}px;
-  min-width: ${props => props.isOpen ? '150px' : '40px'};
-  max-width: ${props => props.isOpen ? '400px' : '40px'};
+  min-width: ${props => props.$isOpen ? '150px' : '40px'};
+  max-width: ${props => props.$isOpen ? '400px' : '40px'};
   background-color: #191622;
-  transition: ${props => props.isDragging ? 'none' : 'width 0.3s ease'};
+  transition: ${props => props.$isDragging ? 'none' : 'width 0.3s ease'};
   z-index: 100;
   border-right: 1px solid rgba(123, 104, 238, 0.3);
   overflow: hidden;
@@ -49,7 +49,7 @@ const SidebarToggle = styled.button`
 const SidebarContent = styled.div`
   padding: 20px 15px;
   height: 100%;
-  display: ${props => props.isOpen ? 'block' : 'none'};
+  display: ${props => props.$isOpen ? 'block' : 'none'};
   overflow: auto;
   
   h3 {
@@ -85,7 +85,7 @@ const MainContent = styled.div`
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  width: calc(100% - ${props => props.sidebarOpen ? props.width : '40px'});
+  width: calc(100% - ${props => props.$sidebarOpen ? props.width : '40px'});
   transition: width 0.3s ease;
 `;
 
@@ -123,9 +123,9 @@ const ViewerToolbar = styled.div`
 `;
 
 const ToolbarButton = styled.button`
-  background: ${props => props.active ? 'rgba(123, 104, 238, 0.8)' : 'rgba(30, 27, 38, 0.7)'};
+  background: ${props => props.$active ? 'rgba(123, 104, 238, 0.8)' : 'rgba(30, 27, 38, 0.7)'};
   color: white;
-  border: 1px solid ${props => props.active ? 'rgba(123, 104, 238, 0.8)' : 'rgba(123, 104, 238, 0.3)'};
+  border: 1px solid ${props => props.$active ? 'rgba(123, 104, 238, 0.8)' : 'rgba(123, 104, 238, 0.3)'};
   border-radius: 4px;
   padding: 8px 16px;
   cursor: pointer;
@@ -135,7 +135,7 @@ const ToolbarButton = styled.button`
   position: relative;
   
   &:hover {
-    background: ${props => props.active ? 'rgba(123, 104, 238, 0.9)' : 'rgba(123, 104, 238, 0.4)'};
+    background: ${props => props.$active ? 'rgba(123, 104, 238, 0.9)' : 'rgba(123, 104, 238, 0.4)'};
   }
 `;
 
@@ -246,12 +246,12 @@ const ChatSidebar = styled.div`
   display: flex;
   flex-direction: column;
   font-family: "SF Mono", "Roboto Mono", "Fira Code", monospace;
-  transition: ${props => props.isDragging ? 'none' : 'transform 0.3s ease'};
+  transition: ${props => props.$isDragging ? 'none' : 'transform 0.3s ease'};
   position: fixed;
-  top: 0;
   right: 0;
-  z-index: 90;
-  box-shadow: -5px 0 15px rgba(0, 0, 0, 0.2);
+  top: 0;
+  transform: translateX(${props => props.$isOpen ? '0' : '100%'});
+  z-index: 100;
 `;
 
 const ChatHeader = styled.div`
@@ -599,6 +599,7 @@ function ModelViewer({ modelData, onBack, projectData }) {
   
   useEffect(() => {
     console.log("Model data changed:", modelData);
+    console.log("Project data:", projectData);
     if (!modelData) return;
 
     const canvas = canvasRef.current;
@@ -647,34 +648,122 @@ function ModelViewer({ modelData, onBack, projectData }) {
     backLight.position.set(-1, -1, -1);
     scene.add(backLight);
 
-    // Load object files if they exist
-Object.keys(objectFiles).forEach((key) => {
-  const objInfo = objectFiles[key];
-  loader.load(
-    objInfo.url,
-    (object) => {
-      // Set position and orientation if provided
-      object.position.set(
-        objInfo.position.x,
-        objInfo.position.y,
-        objInfo.position.z
-      );
-      object.rotation.set(
-        objInfo.orientation.x,
-        objInfo.orientation.y,
-        objInfo.orientation.z
-      );
+    // Load the main model if provided in modelData
+    const loader = new OBJLoader();
+    if (modelData.model) {
+      try {
+        loader.load(
+          modelData.model,
+          (object) => {
+            // Center the object in the scene
+            const box = new THREE.Box3().setFromObject(object);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
 
-      scene.add(object);
-    },
-    (xhr) => {
-      console.log(`${(xhr.loaded / xhr.total) * 100}% loaded`);
-    },
-    (error) => {
-      console.error('An error occurred while loading the object:', error);
+            // Reset position to center of bounding box
+            object.position.x -= center.x;
+            object.position.y -= center.y;
+            object.position.z -= center.z;
+
+            // Scale if needed
+            const maxDim = Math.max(size.x, size.y, size.z);
+            if (maxDim > 10) {
+              const scale = 10 / maxDim;
+              object.scale.set(scale, scale, scale);
+            }
+
+            // Add to scene
+            scene.add(object);
+            objectRef.current = object;
+          },
+          (xhr) => {
+            console.log(`${(xhr.loaded / xhr.total) * 100}% loaded`);
+          },
+          (error) => {
+            console.error("Error loading model:", error);
+          }
+        );
+      } catch (error) {
+        console.error("Error loading main model:", error);
+      }
     }
-  );
-});
+
+    // Load object files from projectData (if available)
+    if (projectData && projectData.objectFiles) {
+      console.log("Loading project object files:", projectData.objectFiles);
+      Object.keys(projectData.objectFiles).forEach((key) => {
+        const objInfo = projectData.objectFiles[key];
+        try {
+          // If we have objData as a string, parse it directly
+          if (objInfo.objData) {
+            const object = loader.parse(objInfo.objData);
+            
+            // Set position if available
+            if (objInfo.position) {
+              object.position.set(
+                objInfo.position[0] || 0,
+                objInfo.position[1] || 0,
+                objInfo.position[2] || 0
+              );
+            }
+            
+            // Set orientation if available
+            if (objInfo.orientation) {
+              object.rotation.set(
+                objInfo.orientation[0] || 0,
+                objInfo.orientation[1] || 0,
+                objInfo.orientation[2] || 0
+              );
+            }
+            
+            // Add default material if needed
+            object.traverse((child) => {
+              if (child instanceof THREE.Mesh && !child.material) {
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0x7b68ee,
+                  metalness: 0.3,
+                  roughness: 0.4
+                });
+              }
+            });
+            
+            scene.add(object);
+          }
+          // If URL is provided instead of objData
+          else if (objInfo.url) {
+            loader.load(
+              objInfo.url,
+              (object) => {
+                // Set position and orientation if provided
+                if (objInfo.position) {
+                  object.position.set(
+                    objInfo.position[0] || 0,
+                    objInfo.position[1] || 0,
+                    objInfo.position[2] || 0
+                  );
+                }
+                if (objInfo.orientation) {
+                  object.rotation.set(
+                    objInfo.orientation[0] || 0,
+                    objInfo.orientation[1] || 0,
+                    objInfo.orientation[2] || 0
+                  );
+                }
+                scene.add(object);
+              },
+              (xhr) => {
+                console.log(`${(xhr.loaded / xhr.total) * 100}% loaded`);
+              },
+              (error) => {
+                console.error('An error occurred while loading the object:', error);
+              }
+            );
+          }
+        } catch (error) {
+          console.error(`Error loading object ${key}:`, error);
+        }
+      });
+    }
 
     // Animation loop
     const animate = () => {
@@ -714,7 +803,7 @@ Object.keys(objectFiles).forEach((key) => {
         rendererRef.current.dispose();
       }
     };
-  }, [modelData]);
+  }, [modelData, projectData]);
   
   const handleSendMessage = async () => {
     if (!message.trim()) return;
@@ -813,98 +902,82 @@ Object.keys(objectFiles).forEach((key) => {
   
   return (
     <ViewerContainer>
-      <Sidebar width={sidebarWidth} isOpen={sidebarOpen} isDragging={isDraggingSidebar}>
+      <Sidebar 
+        width={sidebarWidth} 
+        $isOpen={sidebarOpen}
+        $isDragging={isDraggingSidebar}
+      >
         <SidebarToggle onClick={() => setSidebarOpen(!sidebarOpen)}>
-          {sidebarOpen ? '←' : '→'}
+          {sidebarOpen ? '<' : '>'}
         </SidebarToggle>
-        
-        {sidebarOpen && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              width: '5px',
-              height: '100%',
-              cursor: 'ew-resize'
-            }}
-            onMouseDown={handleSidebarMouseDown}
-          />
-        )}
-        
-        <SidebarContent isOpen={sidebarOpen}>
-          <h3>Scene Controls</h3>
-          
-          <ActionButton onClick={() => setChatOpen(!chatOpen)}>
-            {chatOpen ? 'Close Chat Assistant' : 'Open Chat Assistant'}
-          </ActionButton>
-          
-          <ActionButton onClick={handleViewButton} style={{ 
-            backgroundColor: viewMode === 'view' ? 'rgba(123, 104, 238, 0.4)' : undefined 
-          }}>
-            View Mode
-          </ActionButton>
-          
-          <ActionButton onClick={handleEditButton} style={{ 
-            backgroundColor: viewMode === 'edit' ? 'rgba(123, 104, 238, 0.4)' : undefined 
-          }}>
-            Edit Mode
-          </ActionButton>
-          
-          <ActionButton onClick={handleTrainButton} style={{ 
-            backgroundColor: viewMode === 'train' ? 'rgba(123, 104, 238, 0.4)' : undefined 
-          }}>
-            Training Mode
-          </ActionButton>
-          
-          <ActionButton>
-            Export Model
-          </ActionButton>
-          
-          <ActionButton>
-            Take Screenshot
-          </ActionButton>
-          
-          <h3 style={{ marginTop: '30px' }}>Project Settings</h3>
-          
-          <InfoCard>
-            <h4 style={{ margin: '0 0 10px 0' }}>{projectData?.name || 'Untitled Project'}</h4>
-            <p style={{ margin: '0 0 15px 0', color: '#b3b3b7', fontSize: '0.9rem' }}>
-              {projectData?.description || modelData?.prompt || 'No description available'}
-            </p>
-            <div style={{ fontSize: '0.8rem', color: '#b3b3b7' }}>
-              Created: {projectData?.created_at ? new Date(projectData.created_at.seconds * 1000).toLocaleDateString() : 'Unknown date'}
-            </div>
-          </InfoCard>
+        <div style={{ width: '100%', cursor: 'ew-resize', position: 'absolute', top: 0, right: 0, bottom: 0, width: '5px' }} 
+          onMouseDown={handleSidebarMouseDown}
+        />
+        <SidebarContent $isOpen={sidebarOpen}>
+          <h3>Project Settings</h3>
+          <ActionButton onClick={handleViewButton}>View Mode</ActionButton>
+          <ActionButton onClick={handleEditButton}>Edit Mode</ActionButton>
+          <ActionButton onClick={handleTrainButton}>Training Mode</ActionButton>
+          <hr style={{ margin: '20px 0', borderColor: 'rgba(123, 104, 238, 0.3)' }} />
+          <ActionButton onClick={handleBackToProjects}>Back to Projects</ActionButton>
         </SidebarContent>
       </Sidebar>
       
-      <MainContent sidebarOpen={sidebarOpen} width={sidebarWidth}>
-        <BackButton onClick={handleBackToProjects}>
-          ← Back to Projects
-        </BackButton>
+      <MainContent ref={frameRef} width={sidebarWidth} $sidebarOpen={sidebarOpen}>
+        <BackgroundGradient />
+        {particles.map(particle => (
+          <FloatingParticle
+            key={particle.id}
+            size={particle.size}
+            left={particle.left}
+            top={particle.top}
+            opacity={particle.opacity}
+            speed={particle.speed}
+            delay={particle.delay}
+          />
+        ))}
         
-        {projectData && (
-          <ViewerTitle>{projectData.name || 'Untitled Project'}</ViewerTitle>
-        )}
+        <BackButton onClick={handleBackToProjects}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Back to Projects
+        </BackButton>
         
         <ViewerToolbar>
           <ToolbarButton 
-            active={viewMode === 'view'} 
-            onClick={handleViewButton}
+            onClick={handleViewButton} 
+            $active={viewMode === 'view'}
           >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 3C4.5 3 2 8 2 8C2 8 4.5 13 8 13C11.5 13 14 8 14 8C14 8 11.5 3 8 3Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
             View
           </ToolbarButton>
           <ToolbarButton 
-            active={viewMode === 'edit'} 
-            onClick={handleEditButton}
+            onClick={handleEditButton} 
+            $active={viewMode === 'edit'}
           >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L14 4L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M10 4H14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 14L2 12L4 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M6 12H2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M8 2V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M8 10V14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             Edit
           </ToolbarButton>
           <ToolbarButton 
-            active={viewMode === 'train'} 
-            onClick={handleTrainButton}
+            onClick={handleTrainButton} 
+            $active={viewMode === 'train'}
           >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="6" width="12" height="8" rx="1" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M5 6V4C5 2.89543 5.89543 2 7 2H9C10.1046 2 11 2.89543 11 4V6" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="8" cy="10" r="2" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
             Train
           </ToolbarButton>
         </ViewerToolbar>
@@ -913,21 +986,7 @@ Object.keys(objectFiles).forEach((key) => {
           {getModeDescription()}
         </ModeIndicator>
         
-        <ViewerFrame ref={frameRef}>
-          <BackgroundGradient />
-          
-          {particles.map((particle) => (
-            <FloatingParticle
-              key={particle.id}
-              size={particle.size}
-              left={particle.left}
-              top={particle.top}
-              opacity={particle.opacity}
-              speed={particle.speed}
-              delay={particle.delay}
-            />
-          ))}
-          
+        <ViewerFrame>
           <ThreeJSContainer>
             <canvas ref={canvasRef} />
           </ThreeJSContainer>
@@ -936,7 +995,8 @@ Object.keys(objectFiles).forEach((key) => {
         {chatOpen && (
           <ChatSidebar 
             width={chatSidebarWidth} 
-            isDragging={isDraggingChatSidebar}
+            $isOpen={chatOpen} 
+            $isDragging={isDraggingChatSidebar}
           >
             <div
               style={{
@@ -975,59 +1035,59 @@ Object.keys(objectFiles).forEach((key) => {
               </button>
             </div>
             
-            <div 
+            <div
               ref={chatContainerRef}
-              style={{ 
-                flex: 1, 
+              style={{
+                flex: 1,
                 overflow: 'auto',
-                padding: '15px',
+                padding: '20px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '15px'
+                gap: '10px'
               }}
             >
-              {chatHistory.length === 0 ? (
-                <div style={{ 
-                  color: '#b3b3b7', 
-                  textAlign: 'center',
-                  marginTop: '30px',
-                  padding: '0 20px'
-                }}>
-                  <p>Ask me questions about your 3D environment or how to customize it!</p>
+              {chatHistory.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={msg.sender === 'user' ? 'user-message' : 'ai-message'}
+                  style={{
+                    alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                    background: msg.sender === 'user' 
+                      ? 'rgba(123, 104, 238, 0.3)' 
+                      : msg.isError 
+                        ? 'rgba(255, 99, 71, 0.2)' 
+                        : 'rgba(30, 27, 38, 0.7)',
+                    borderRadius: '8px',
+                    padding: '10px 15px',
+                    maxWidth: '80%',
+                    wordBreak: 'break-word'
+                  }}
+                >
+                  <ReactMarkdown>{msg.text}</ReactMarkdown>
                 </div>
-              ) : (
-                chatHistory.map((msg) => (
-                  <div 
-                    key={msg.id}
-                    style={{
-                      alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-                      background: msg.sender === 'user' 
-                        ? 'rgba(123, 104, 238, 0.3)' 
-                        : msg.isError 
-                          ? 'rgba(255, 107, 107, 0.2)' 
-                          : 'rgba(40, 36, 52, 0.6)',
-                      padding: '10px 15px',
-                      borderRadius: '12px',
-                      maxWidth: '85%',
-                      wordBreak: 'break-word'
-                    }}
-                  >
-                    <ReactMarkdown>
-                      {msg.text}
-                    </ReactMarkdown>
-                  </div>
-                ))
-              )}
-              
+              ))}
               {isLoading && (
-                <div style={{
-                  alignSelf: 'flex-start',
-                  background: 'rgba(40, 36, 52, 0.6)',
-                  padding: '15px',
-                  borderRadius: '12px',
-                  color: '#b3b3b7'
-                }}>
-                  Thinking...
+                <div
+                  style={{
+                    alignSelf: 'flex-start',
+                    background: 'rgba(30, 27, 38, 0.7)',
+                    borderRadius: '8px',
+                    padding: '10px 15px',
+                    maxWidth: '80%'
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <span style={{ animation: 'pulse 1s infinite' }}>.</span>
+                    <span style={{ animation: 'pulse 1s infinite 0.2s' }}>.</span>
+                    <span style={{ animation: 'pulse 1s infinite 0.4s' }}>.</span>
+                  </div>
+                  <style>{`
+                    @keyframes pulse {
+                      0% { opacity: 0.4; }
+                      50% { opacity: 1; }
+                      100% { opacity: 0.4; }
+                    }
+                  `}</style>
                 </div>
               )}
             </div>
