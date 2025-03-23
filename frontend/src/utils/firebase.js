@@ -96,9 +96,13 @@ export const createEnvironment = async (userId, environmentData) => {
     const environmentsRef = collection(db, "environments");
     const newEnvironmentRef = doc(environmentsRef);
     
-    console.log("Creating new environment document");
+    // Extract just the name and description
+    const { name, description = '' } = environmentData;
+    
+    console.log("Creating new environment document with name:", name);
     await setDoc(newEnvironmentRef, {
-      ...environmentData,
+      name,
+      description,
       owner_id: userId,
       created_at: new Date(),
       updated_at: new Date()
@@ -210,4 +214,4 @@ export const deleteEnvironment = async (userId, environmentId) => {
   }
 };
 
-export { auth, app, db }; 
+export { auth, app, db };

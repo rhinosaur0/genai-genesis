@@ -1,0 +1,4 @@
+{
+    "obj1": ["chair.obj", "chair.urdf"],
+    "obj2": ["table.obj", "table.urdf"]
+}

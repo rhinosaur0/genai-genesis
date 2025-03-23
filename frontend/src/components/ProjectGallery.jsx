@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../utils/AuthContext';
 import { getUserEnvironments, createEnvironment, deleteEnvironment } from '../utils/firebase';
+import axios from 'axios';
 
 const spin = keyframes`
   0% { transform: rotate(0deg); }
@@ -522,6 +523,29 @@ const ProjectGallery = ({ onSelectProject }) => {
     if (!currentUser) {
       console.error("Attempting to create project but user is not logged in");
       return;
+    }
+
+    if (selectedImage) {
+      try {
+        console.log("Uploading filename to backend:", selectedImage.name);
+        
+        // Create the payload with both filename and user ID
+        const filenamePayload = {
+          filename: selectedImage.name,
+          uid: currentUser.uid
+        };
+        
+        // Make the POST request to the backend
+        const uploadResponse = await axios.post('http://localhost:8000/upload_filename', filenamePayload);
+        
+        if (uploadResponse.data.status === 'success') {
+          console.log("Filename upload successful:", uploadResponse.data);
+        } else {
+          console.warn("Filename upload returned error:", uploadResponse.data);
+        }
+      } catch (uploadError) {
+        console.error("Error uploading filename:", uploadError);
+      }
     }
     
     try {

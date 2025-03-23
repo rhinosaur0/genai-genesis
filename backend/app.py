@@ -1,33 +1,25 @@
 from typing import List
-from fastapi import FastAPI, Depends, requests
+from fastapi import FastAPI
 from pydantic import BaseModel
 import uvicorn
 from pybullet_env.env import BulletEnv
 from fastapi.middleware.cors import CORSMiddleware
+from pybullet_env.trainer import Trainer
 
-import socketio
 import os
 import xml.etree.ElementTree as ET
-import uuid
 from kubernetes import client, config
 
 app = FastAPI()
-sio = socketio.AsyncServer(async_mode='asgi')
-
-app.mount("/socket.io", socketio.ASGIApp(sio))
-
-app.add_middleware(
-    CORSMiddleware,
-    cors_allowed_origins = []
-)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins='*',
-    allow_credentials = True,
-    allow_methods = ["GET", "POST"],
-    allow_headers = ["*"]
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"]
 )
+
 # Pydantic models for input validation
 class FilenamePayload(BaseModel):
     filename: str
@@ -40,21 +32,13 @@ class ObjectPositionPayload(BaseModel):
 class PositionPayload(BaseModel):
     objects: List[ObjectPositionPayload]
 
-# Session metadata to track client-specific data
-session_metadata = {}
-
 # Path configurations
-OBJ_DIR = os.path.join(os.getcwd(), "meshes")
+OBJ_DIR = os.path.join(os.getcwd(), "obj")
 URDF_DIR = os.path.join(os.getcwd(), "urdf")
 
 # Ensure directories exist
 os.makedirs(OBJ_DIR, exist_ok=True)
 os.makedirs(URDF_DIR, exist_ok=True)
-
-
-
-def get_session_id(request: Request):
-    return request.headers.get("session-id", str(uuid.uuid4()))
 
 def update_urdf_position(urdf_path, position, orientation):
     """Update position and orientation in a URDF file"""
@@ -80,69 +64,21 @@ def update_urdf_position(urdf_path, position, orientation):
         print(f"Error updating URDF {urdf_path}: {e}")
         return False
 
-@sio.event
-async def connect(sid, environ):
-    """Initialize session metadata when a client connects"""
-    session_metadata[sid] = {
-        "environment_objects": [],
-        "agent": None
-    }
-    print(f"Client connected: {sid}")
-    await sio.emit('connected', {'status': 'connected', 'session_id': sid}, to=sid)
-
-@sio.event
-async def disconnect(sid):
-    """Clean up session metadata when a client disconnects"""
-    if sid in session_metadata:
-        del session_metadata[sid]
-    print(f"Client disconnected: {sid}")
-
 @app.post("/upload_filename")
-async def upload_filename(payload: FilenamePayload, session_id: str = Depends(get_session_id)):
+async def upload_filename(payload: FilenamePayload):
     """
     Upload a filename and find the corresponding .obj file.
-    Adds the object to the session's environment objects.
     """
-    if session_id not in session_metadata:
-        session_metadata[session_id] = {"environment_objects": [], "agent": None}
-    
-    # Get base name without extension
-    base_name = os.path.splitext(payload.filename)[0]
-    obj_filename = f"{base_name}.obj"
-    
-    # Check if obj file exists
-    obj_path = os.path.join(OBJ_DIR, obj_filename)
-    if not os.path.exists(obj_path):
-        return {"status": "error", "message": f"Object file {obj_filename} not found"}
-    
-    # Generate or find the corresponding URDF
-    urdf_filename = f"{base_name}.urdf"
-    urdf_path = os.path.join(URDF_DIR, urdf_filename)
-    
-    # If URDF doesn't exist, you might want to generate it
-    # For now, assume it exists or return an error
-    if not os.path.exists(urdf_path):
-        return {"status": "error", "message": f"URDF file {urdf_filename} not found"}
-    
-    # Add to session's environment objects if not already there
-    if obj_filename not in session_metadata[session_id]["environment_objects"]:
-        session_metadata[session_id]["environment_objects"].append(obj_filename)
-    
     return {
-        "status": "success", 
-        "message": "Filename received",
-        "obj_file": obj_filename,
-        "urdf_file": urdf_filename
+        "status": "success",
+        "message": f"Filename {payload.filename} received"
     }
 
 @app.post("/upload_position")
-async def upload_position(payload: PositionPayload, session_id: str = Depends(get_session_id)):
+async def upload_position(payload: PositionPayload):
     """
     Update the positions and orientations of multiple objects in their URDF files.
     """
-    if session_id not in session_metadata:
-        return {"status": "error", "message": "Session not found"}
-    
     results = []
     
     for obj in payload.objects:
@@ -174,7 +110,6 @@ async def upload_position(payload: PositionPayload, session_id: str = Depends(ge
     
     return {"status": "success", "results": results}
 
-
 def create_training_pod(pod_name, session_id):
     # Use in-cluster config if running within Kubernetes; otherwise, use config.load_kube_config()
     try:
@@ -202,28 +137,15 @@ def create_training_pod(pod_name, session_id):
     v1.create_namespaced_pod(namespace="default", body=pod)
 
 @app.post("/begin_training")
-async def begin_training(session_id: str = Depends(get_session_id)):
+async def begin_training():
     """
-    Start the training process using all the environment objects in the session.
+    Start the training process using all the environment objects.
     """
-    if session_id not in session_metadata:
-        return {"status": "error", "message": "Session not found"}
-    
-    session = session_metadata[session_id]
-    
-    if not session["environment_objects"]:
-        return {"status": "error", "message": "No environment objects configured"}
-    
-    print(f"Starting training with {len(session['environment_objects'])} objects")
-    
-    # Prepare URDF files and environment configuration
+    # Get all URDF files in the directory
     urdf_files = []
-    for obj_filename in session["environment_objects"]:
-        base_name = os.path.splitext(obj_filename)[0]
-        urdf_filename = f"{base_name}.urdf"
-        urdf_path = os.path.join(URDF_DIR, urdf_filename)
-        
-        if os.path.exists(urdf_path):
+    for filename in os.listdir(URDF_DIR):
+        if filename.endswith(".urdf"):
+            urdf_path = os.path.join(URDF_DIR, filename)
             urdf_files.append(urdf_path)
     
     if not urdf_files:
@@ -244,32 +166,6 @@ async def begin_training(session_id: str = Depends(get_session_id)):
         "message": "Training completed",
         "training_result": result
     }
-
-# Socket.IO event for live updates
-@sio.event
-async def update_live_position(sid, data):
-    """
-    Update object positions in real-time during simulation.
-    """
-    if sid not in session_metadata:
-        return {"status": "error", "message": "Session not found"}
-    
-    if isinstance(data, dict) and "objects" in data:
-        for obj in data["objects"]:
-            filename = obj.get("filename")
-            position = obj.get("position")
-            orientation = obj.get("orientation")
-            
-            if filename and position and orientation:
-                base_name = os.path.splitext(filename)[0]
-                urdf_filename = f"{base_name}.urdf"
-                urdf_path = os.path.join(URDF_DIR, urdf_filename)
-                
-                if os.path.exists(urdf_path):
-                    update_urdf_position(urdf_path, position, orientation)
-    
-    # Optionally broadcast updated state to other clients
-    await sio.emit("state_update", {"status": "position_updated"}, to=sid)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
