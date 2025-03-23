@@ -7,7 +7,7 @@ Credit goes to ChatGPT, Gemini, Copilot, Claude 3.7, and other various LLM model
 ### Build the image
 
 ```bash
-docker build -t region-docker.pkg.dev/project-id/repo/name:tag .
+docker build -t --platform linux/amd64 region-docker.pkg.dev/project-id/repo/name:tag .
 ```
 
 Tag image:
@@ -17,6 +17,14 @@ docker tag region-docker.pkg.dev/project-id/repo/name:tag region-docker.pkg.dev/
 ```
 
 ### Push to Google Container Registry
+
+First authenticate:
+
+```bash
+gcloud auth configure-docker region-docker.pkg.dev
+```
+
+Then push:
 
 ```bash
 docker push region-docker.pkg.dev/projectid/repo/name:latest
@@ -31,7 +39,7 @@ gcloud artifacts repositories create repo-name --repository-format=docker --loca
 ## Deploying Cloud Run
 
 ```bash
-gcloud run deploy --image=region-docker.pkg.dev/project-id/repo/name:tag --platform=managed --region=region --allow-unauthenticated --set-env-vars GCS_BUCKET_NAME=genai-genesis-storage
+gcloud run deploy service-name --image=region-docker.pkg.dev/project-id/repo/name:tag --platform=managed --region=region --allow-unauthenticated --set-env-vars GCS_BUCKET_NAME=genai-genesis-storage
 ```
 
 ## Kubernetes Jobs
