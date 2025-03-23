@@ -8,6 +8,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
 import { io } from 'socket.io-client';
+import { io } from 'socket.io-client';
+import * as THREE from 'three';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 const spin = keyframes`
   0% { transform: rotate(0deg); }
@@ -888,53 +892,10 @@ const ProjectGallery = ({ onSelectProject }) => {
         formData.append('uid', currentUser.uid);
         formData.append('prompt', projectDescription);
         
-        // MOCK IMPLEMENTATION FOR TESTING
-        // Comment this out when your backend is ready
-        const useMock = true; // Set to false when your backend is available
-        
-        if (useMock) {
-          // Create a mock response after a delay to simulate backend processing
-          setTimeout(() => {
-            console.log("Using mock response for testing");
-            // Convert the image preview to the renderedImage for testing
-            setRenderedImage(imagePreview);
-            // Show the render preview
-            setShowRenderPreview(true);
-            setIsCreatingProject(false);
-          }, 1500);
-          return;
-        }
-        
-        // REAL IMPLEMENTATION - Uncomment when backend is ready
-        try {
-          // Make the POST request to the backend
-          const response = await axios.post('http://localhost:8000/process_image', formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          });
-          
-          if (response.data.status === 'success') {
-            console.log("Image processing successful");
-            // Store the base64 rendered image from the backend
-            setRenderedImage(response.data.rendered_image);
-            // Show the render preview
-            setShowRenderPreview(true);
-            setIsCreatingProject(false);
-          } else {
-            console.warn("Image processing returned error:", response.data);
-            setError("Failed to process image. Please try again.");
-            setIsCreatingProject(false);
-          }
-        } catch (uploadError) {
-          console.error("Error processing image:", uploadError);
-          setError("Failed to process image: " + (uploadError.message || "Unknown error"));
-          setIsCreatingProject(false);
-        }
-      } catch (outer_error) {
-        console.error("Error in form submission:", outer_error);
-        setError("An error occurred. Please try again.");
-        setIsCreatingProject(false);
+        // Make the POST request to the backend through socket
+        socket.current.emit("upload_filename", filenamePayload);
+      } catch (uploadError) {
+        console.error("Error uploading filename:", uploadError);
       }
     } else {
       setError("Please select an image to upload");
@@ -1315,6 +1276,10 @@ const ProjectGallery = ({ onSelectProject }) => {
       
       {showObjectTest && (
         <ObjectTestOverlay>
+          {/* <OverlayHeader>
+            <OverlayTitle>Testing 3D Object Loading</OverlayTitle>
+            <OverlayCloseButton onClick={closeObjectTest}>&times;</OverlayCloseButton>
+          </OverlayHeader> */}
           <CanvasContainer>
             <canvas 
               ref={testCanvasRef} 
