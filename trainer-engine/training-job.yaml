@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: trainer
-          image: northamerica-northeast2-docker.pkg.dev/elated-emitter-454512-q9/kube/trainer:latest
+          image: northamerica-northeast2-docker.pkg.dev/elated-emitter-454512-q9/kube/trainer
           resources:
             requests:
               cpu: "4"

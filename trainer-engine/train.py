@@ -42,8 +42,11 @@ def train(env_id="HalfCheetahBulletEnv-v0"):
 
     # Make sure we have the bucket name
     if "BUCKET_NAME" not in os.environ:
-        raise ValueError("BUCKET_NAME environment variable must be set")
-    bucket_name = os.environ["BUCKET_NAME"]
+        # raise ValueError("BUCKET_NAME environment variable must be set")
+        bucket_name = "genai-genesis-storage"
+    else:
+        bucket_name = os.environ["BUCKET_NAME"]
+        
     logger.info(f"Will save outputs to gs://{bucket_name}/test-train/")
 
     # Initialize the agent
