@@ -1,0 +1,12 @@
+fastapi==0.115.11
+google-cloud-storage==3.1.0
+gymnasium==1.1.1
+netifaces==0.10.6
+pybullet==3.2.7
+python-engineio==4.11.2
+python-socketio==5.12.1
+setuptools==3.3
+simple-websocket==1.1.0
+trimesh==4.6.5
+uvicorn==0.34.0
+websocket-client==1.8.0

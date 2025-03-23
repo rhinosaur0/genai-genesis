@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: renderer-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: renderer-engine
+  template:
+    metadata:
+      labels:
+        app: renderer-engine
+    spec:
+      serviceAccountName: gke-storage-admin
+      containers:
+        - name: renderer-engine
+          image: northamerica-northeast2-docker.pkg.dev/elated-emitter-454512-q9/kube/renderer
+          ports:
+            - containerPort: 8000
+          env:
+            - name: BUCKET_NAME
+              value: genai-genesis-storage
