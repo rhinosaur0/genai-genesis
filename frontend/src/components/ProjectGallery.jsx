@@ -530,6 +530,98 @@ const SimulationStatus = styled.div`
   z-index: 100;
 `;
 
+// First, add the styled component for the Training Button
+const TrainingButton = styled.button`
+  position: absolute;
+  top: 140px;
+  right: 20px;
+  background-color: #6a57dd;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  z-index: 100;
+  
+  &:hover {
+    background-color: #5a49cd;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(123, 104, 238, 0.4);
+  }
+  
+  &:disabled {
+    background-color: rgba(123, 104, 238, 0.5);
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+`;
+
+// Add a styled component for Training Status
+const TrainingStatus = styled.div`
+  position: absolute;
+  top: 200px;
+  right: 20px;
+  background: rgba(30, 27, 38, 0.8);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(123, 104, 238, 0.3);
+  color: white;
+  font-size: 14px;
+  z-index: 100;
+`;
+
+// First, add the styled component for the Agent Button
+const AgentButton = styled.button`
+  position: absolute;
+  top: 200px;
+  right: 20px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  z-index: 100;
+  
+  &:hover {
+    background-color: #3e8e41;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+  }
+  
+  &:disabled {
+    background-color: rgba(76, 175, 80, 0.5);
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+`;
+
+// Add a styled component for Agent Status
+const AgentStatus = styled.div`
+  position: absolute;
+  top: 260px;
+  right: 20px;
+  background: rgba(30, 27, 38, 0.8);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  color: white;
+  font-size: 14px;
+  z-index: 100;
+`;
+
 const ProjectGallery = ({ onSelectProject }) => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -550,6 +642,12 @@ const ProjectGallery = ({ onSelectProject }) => {
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulationStep, setSimulationStep] = useState(0);
   const simulationObjectsRef = useRef({});
+  const [isTraining, setIsTraining] = useState(false);
+  const [trainingStatus, setTrainingStatus] = useState(null);
+  const [agentAdded, setAgentAdded] = useState(false);
+  const [agentInfo, setAgentInfo] = useState(null);
+  const [agentObject, setAgentObject] = useState(null);
+  const agentRef = useRef(null);
 
   const { currentUser, logout } = useAuth();
 
@@ -747,17 +845,38 @@ const ProjectGallery = ({ onSelectProject }) => {
       
       // Update object positions
       if (data.objects && testSceneRef.current) {
-        // Find objects in the scene and update their positions
+        // Process all objects in the data
         data.objects.forEach(obj => {
-          if (simulationObjectsRef.current[obj.filename]) {
-            const object3D = simulationObjectsRef.current[obj.filename];
-            object3D.position.set(...obj.position);
-            if (obj.orientation) {
-              object3D.rotation.set(...obj.orientation);
+          // Check if this is the agent
+          if (obj.filename === 'agent') {
+            // Update agent if it exists
+            if (agentRef.current) {
+              agentRef.current.position.set(...obj.position);
+              if (obj.orientation) {
+                // Set quaternion directly
+                agentRef.current.quaternion.set(...obj.orientation);
+              }
+              
+              // Update agent info state for display, converting quaternion to Euler if needed
+              setAgentInfo({
+                position: obj.position,
+                orientation: obj.orientation || [0, 0, 0, 1]
+              });
+            }
+          } else {
+            // Update regular objects
+            if (simulationObjectsRef.current[obj.filename]) {
+              const object3D = simulationObjectsRef.current[obj.filename];
+              object3D.position.set(...obj.position);
+              if (obj.orientation) {
+                object3D.quaternion.set(...obj.orientation);
+              }
             }
           }
         });
       }
+      
+      
     });
 
     return () => {
@@ -867,7 +986,7 @@ const ProjectGallery = ({ onSelectProject }) => {
         
         // Create the payload with both filename and user ID
         const filenamePayload = {
-          filename: selectedImage.name,
+          filename: "testingenv",
           uid: currentUser.uid
         };
         
@@ -980,31 +1099,221 @@ const ProjectGallery = ({ onSelectProject }) => {
     setIsSimulating(true);
     setSimulationStep(0);
     
+    // Create array of objects (excluding agent)
+    const simulationObjects = Object.keys(simulationObjectsRef.current).map(key => ({
+      filename: key,
+      position: [
+        simulationObjectsRef.current[key].position.x,
+        simulationObjectsRef.current[key].position.y,
+        simulationObjectsRef.current[key].position.z
+      ],
+      orientation: [
+        simulationObjectsRef.current[key].rotation.x,
+        simulationObjectsRef.current[key].rotation.y,
+        simulationObjectsRef.current[key].rotation.z
+      ]
+    }));
+    
+    // Add agent to simulation data if it exists
+    if (agentRef.current && agentAdded) {
+      simulationObjects.push({
+        filename: 'agent',
+        position: [
+          agentRef.current.position.x,
+          agentRef.current.position.y,
+          agentRef.current.position.z
+        ],
+        orientation: [
+          agentRef.current.rotation.x,
+          agentRef.current.rotation.y,
+          agentRef.current.rotation.z
+        ]
+      });
+    }
+    
     // Emit event to start simulation
     socket.current.emit("start_simulation", {
-      objects: Object.keys(objectFiles).map(key => ({
-        filename: key,
-        // Include current position if available
-        position: simulationObjectsRef.current[key] 
-          ? [
-              simulationObjectsRef.current[key].position.x,
-              simulationObjectsRef.current[key].position.y,
-              simulationObjectsRef.current[key].position.z
-            ]
-          : [0, 0, 0],
-        // Include current orientation if available
-        orientation: simulationObjectsRef.current[key]
-          ? [
-              simulationObjectsRef.current[key].rotation.x,
-              simulationObjectsRef.current[key].rotation.y,
-              simulationObjectsRef.current[key].rotation.z
-            ]
-          : [0, 0, 0]
-      }))
+      objects: simulationObjects
     });
     
-    console.log("Simulation started");
+    console.log("Simulation started with agent");
   };
+
+  const startTraining = () => {
+    if (!socket.current || isTraining) return;
+    
+    setIsTraining(true);
+    setTrainingStatus("Initializing training...");
+    
+    const filenamePayload = {
+      filename: "testingenv",
+      uid: currentUser.uid
+    };
+    // Emit event to start training, passing the filenames just like with upload_filename
+    socket.current.emit("start_training", 
+      filenamePayload
+    );
+
+    // setIsSimulating(true);
+    setSimulationStep(0);
+    
+    // Create array of objects (excluding agent)
+    const simulationObjects = Object.keys(simulationObjectsRef.current).map(key => ({
+      filename: key,
+      position: [
+        simulationObjectsRef.current[key].position.x,
+        simulationObjectsRef.current[key].position.y,
+        simulationObjectsRef.current[key].position.z
+      ],
+      orientation: [
+        simulationObjectsRef.current[key].rotation.x,
+        simulationObjectsRef.current[key].rotation.y,
+        simulationObjectsRef.current[key].rotation.z
+      ]
+    }));
+    
+    // Add agent to simulation data if it exists
+    if (agentRef.current && agentAdded) {
+      simulationObjects.push({
+        filename: 'agent',
+        position: [
+          agentRef.current.position.x,
+          agentRef.current.position.y,
+          agentRef.current.position.z
+        ],
+        orientation: [
+          agentRef.current.rotation.x,
+          agentRef.current.rotation.y,
+          agentRef.current.rotation.z
+        ]
+      });
+    }
+
+    
+    console.log("Training started");
+  };
+  
+  // Add socket event listeners for training updates
+  useEffect(() => {
+    if (!socket.current) return;
+    
+    // Listen for training updates
+    socket.current.on("training_status", (data) => {
+      console.log("Received training status:", data);
+      setTrainingStatus(data.message || "Training in progress...");
+    });
+    
+    socket.current.on("training_complete", (data) => {
+      console.log("Training completed:", data);
+      setIsTraining(false);
+      setTrainingStatus(`Training completed: ${data.message || "Success!"}`);
+      
+      // Clear status after 5 seconds
+      setTimeout(() => {
+        setTrainingStatus(null);
+      }, 5000);
+    });
+    
+    socket.current.on("training_error", (data) => {
+      console.error("Training error:", data);
+      setIsTraining(false);
+      setTrainingStatus(`Training error: ${data.message || "Unknown error"}`);
+    });
+    
+    return () => {
+      socket.current.off("training_status");
+      socket.current.off("training_complete");
+      socket.current.off("training_error");
+    };
+  }, []);
+
+  const addAgent = () => {
+    if (!testSceneRef.current || agentAdded) return;
+    
+    // Create a cube with 0.5 length
+    const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const material = new THREE.MeshStandardMaterial({ 
+      color: 0x4caf50,  // Green color for agent
+      metalness: 0.3,
+      roughness: 0.4
+    });
+    
+    const agentCube = new THREE.Mesh(geometry, material);
+    
+    // Position the cube at the center x, y and just above the plane (z=0.25 so bottom is at z=0)
+    agentCube.position.set(0, 0, 0.25);
+    
+    // Add to scene
+    testSceneRef.current.add(agentCube);
+    
+    // Store reference to the agent separately
+    agentRef.current = agentCube;
+    
+    // Store agent data in state
+    setAgentObject({
+      position: [0, 0, 0.25],
+      orientation: [0, 0, 0]
+    });
+    
+    setAgentAdded(true);
+    setAgentInfo({
+      position: [0, 0, 0.25],
+      orientation: [0, 0, 0]
+    });
+    
+    // Also emit socket event to inform backend
+    if (socket.current) {
+      socket.current.emit("agent_added", {
+        environment: "testingenv",
+        agent: {
+          type: "cube",
+          size: 0.5,
+          position: [0, 0, 0.25],
+          orientation: [0, 0, 0]
+        }
+      });
+    }
+    
+    console.log("Agent added to scene");
+  };
+  
+  // Listen for socket updates about agent position from backend
+  useEffect(() => {
+    if (!socket.current) return;
+    
+    socket.current.on("agent_position_update", (data) => {
+      console.log("Received agent position update:", data);
+      
+      if (data.position && simulationObjectsRef.current["agent_cube"]) {
+        const agentCube = simulationObjectsRef.current["agent_cube"];
+        agentCube.position.set(...data.position);
+        
+        if (data.orientation) {
+          agentCube.rotation.set(...data.orientation);
+        }
+        
+        // Update agent info state for display
+        setAgentInfo({
+          position: data.position,
+          orientation: data.orientation || [0, 0, 0]
+        });
+        
+        // Update object files state
+        setObjectFiles(prevObjects => ({
+          ...prevObjects,
+          "agent_cube": {
+            ...prevObjects["agent_cube"],
+            position: data.position,
+            orientation: data.orientation || [0, 0, 0]
+          }
+        }));
+      }
+    });
+    
+    return () => {
+      socket.current.off("agent_position_update");
+    };
+  }, []);
 
   if (!currentUser) {
     return (
@@ -1248,7 +1557,7 @@ const ProjectGallery = ({ onSelectProject }) => {
               </ObjectInfo>
             )}
             
-            {/* Add simulation button */}
+            {/* Simulation button */}
             <SimulationButton 
               onClick={startSimulation}
               disabled={isSimulating || Object.keys(simulationObjectsRef.current).length === 0}
@@ -1256,11 +1565,41 @@ const ProjectGallery = ({ onSelectProject }) => {
               {isSimulating ? 'Simulating...' : 'Start Simulation'}
             </SimulationButton>
             
-            {/* Add simulation status if active */}
+            {/* Add Training button */}
+            <TrainingButton 
+              onClick={startTraining}
+              disabled={isTraining || Object.keys(simulationObjectsRef.current).length === 0}
+            >
+              {isTraining ? 'Training...' : 'Start Training'}
+            </TrainingButton>
+            
+            {/* Add Agent button */}
+            <AgentButton 
+              onClick={addAgent}
+              disabled={agentAdded}
+            >
+              {agentAdded ? 'Agent Added' : 'Add Agent'}
+            </AgentButton>
+            
+            {/* Simulation status */}
             {isSimulating && (
               <SimulationStatus>
                 Simulation Step: {simulationStep}/20
               </SimulationStatus>
+            )}
+            
+            {/* Training status */}
+            {trainingStatus && (
+              <TrainingStatus>
+                {trainingStatus}
+              </TrainingStatus>
+            )}
+            
+            {/* Agent info */}
+            {agentInfo && (
+              <AgentStatus>
+                Agent position: [{agentInfo.position.map(p => p.toFixed(2)).join(', ')}]
+              </AgentStatus>
             )}
           </CanvasContainer>
         </ObjectTestOverlay>

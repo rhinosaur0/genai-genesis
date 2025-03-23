@@ -83,7 +83,17 @@ class MultiObjectBulletEnv(gym.Env):
     def __init__(self, objects, agent):
         self.objects = objects  # List of GeneralObject instances
         self.agent = agent      # An AgentBall instance
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(6,), dtype=np.float32)
+        
+        # Calculate observation space size: 3 values for agent position + 3 values per object
+        obs_dim = 3 + (len(objects) * 3)
+        
+        self.observation_space = spaces.Box(
+            low=-np.inf, 
+            high=np.inf, 
+            shape=(obs_dim,), 
+            dtype=np.float32
+        )
+        
         self.action_space = spaces.Discrete(1)
         self.done = False
         self.physics_client = p.connect(p.GUI)
@@ -105,21 +115,35 @@ class MultiObjectBulletEnv(gym.Env):
         return self._get_obs()
 
     def _get_obs(self):
-        pos_agent, _ = p.getBasePositionAndOrientation(self.agent.body_id)
-        # For simplicity, we return agent position and the position of the first object.
-        if self.objects:
-            pos_obj, _ = p.getBasePositionAndOrientation(self.objects[0].body_id)
-        else:
-            pos_obj = [0, 0, 0]
-        return np.array(list(pos_agent) + list(pos_obj), dtype=np.float32)
+        # Get agent position and orientation
+        pos_agent, orn_agent = p.getBasePositionAndOrientation(self.agent.body_id)
+        print(f'pos_agent: {pos_agent}')
+        print(f'orn_agent: {orn_agent}')
+        
+        # Get positions of all objects
+        obj_positions = []
+        for obj in self.objects:
+            pos_obj, orn_obj = p.getBasePositionAndOrientation(obj.body_id)
+            obj_positions.extend(pos_obj)
+            obj_positions.extend(orn_obj)  # Add the x, y, z coordinates
+        
+        # If no objects, return zeros
+        if not obj_positions:
+            obj_positions = [0, 0, 0]
+        
+        # Combine agent position with all object positions
+        combined_obs = np.array(list(pos_agent) + list(orn_agent) + obj_positions, dtype=np.float32)
+        
+        return combined_obs
 
     def step(self, action):
         # For demonstration, steer the agent toward the first object.
         if self.objects:
             self.agent.set_velocity_toward(self.objects[0].position, speed=4.0)
         p.stepSimulation()
-        time.sleep(1/20)
+        
         obs = self._get_obs()
+        print(obs)
         reward = 0.0
         for obj in self.objects:
             if detect_collision(self.agent.body_id, obj.body_id):

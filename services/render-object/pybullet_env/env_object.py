@@ -5,17 +5,18 @@ import os
 
 class GeneralObject:
     """A general object loaded from a mesh file."""
-    def __init__(self, filename: str, position: list, scale=[1,1,1]):
+    def __init__(self, filename: str, position: list, env_name: str, scale=[1,1,1]):
         self.filename = filename
         self.position = position  # Expected to be a list [x, y, z]
         self.scale = scale
         self.body_id = None
+        self.env_name = env_name
 
     def load(self):
         """Load the mesh object as a collision and visual shape."""
         # Construct the full path to the obj file in the assets directory
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        obj_path = os.path.join(base_dir, "assets", self.filename)
+        obj_path = os.path.join(base_dir, "assets", self.env_name, self.filename)
         
         # Print the path for debugging
         print(f"Loading mesh from: {obj_path}")

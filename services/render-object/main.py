@@ -11,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import storage
 import asyncio
 
-from pybullet_env.trainer import Trainer
 from pybullet_env.env import MultiObjectBulletEnv
 from pybullet_env.agent import AgentBall
 from pybullet_env.env_object import GeneralObject
@@ -83,7 +82,9 @@ def download_env_from_gcp(env_name):
     
     # Create an "assets" directory in the current working directory
     current_dir = os.getcwd()
-    assets_dir = os.path.join(current_dir, "assets")
+    print(env_name)
+    assets_dir = os.path.join(current_dir, "assets", env_name)
+    print(assets_dir)
     os.makedirs(assets_dir, exist_ok=True)
     
     prefix = f"{env_name}/objects/"
@@ -181,7 +182,10 @@ async def start_simulation(sid, data):
                 if "position" in obj:
                     # Increase x position by 0.2
                     obj["position"][0] += 0.2
-            
+            print({
+                "step": step,
+                "objects": objects
+            })
             # Send the updated positions to the client
             await sio.emit('simulation_step', {
                 "step": step,
@@ -203,14 +207,17 @@ async def start_simulation(sid, data):
             "message": f"Simulation error: {str(e)}"
         }, room=sid)
 
-def start_training_process(env_name):
+@sio.event
+async def start_training(sid, env_name):
     """
     Load all URDF files (and their linked OBJ files) from the assets directory for the given env_name.
     For each URDF file, create a GeneralObject instance.
     Also create an agent instance and build the environment.
     Finally, start the training using the Trainer class.
     """
+    env_name = env_name.get("filename")
     objects = []
+    object_names = []
     assets_dir = os.path.join(os.getcwd(), "assets", env_name)
     # Find all URDF files recursively.
     urdf_files = glob.glob(os.path.join(assets_dir, "**/*.urdf"), recursive=True)
@@ -247,7 +254,8 @@ def start_training_process(env_name):
             else:
                 continue
             # Create a GeneralObject instance for this object.
-            obj_instance = GeneralObject(filename=mesh_filename, position=position)
+            object_names.append(mesh_filename)
+            obj_instance = GeneralObject(filename=mesh_filename, position=position, env_name = env_name)
             objects.append(obj_instance)
         except Exception as e:
             print(f"Error processing {urdf_file}: {e}")
@@ -256,11 +264,40 @@ def start_training_process(env_name):
     # Build the environment with all objects.
     env = MultiObjectBulletEnv(objects=objects, agent=agent)
     # Create the trainer and start training.
-    trainer = Trainer(env)
-    training_result = trainer.train()
     # Optionally, render (if render() is implemented).
-    env.render()
-    return training_result
+
+    max_steps = 1000
+    obs = env.reset()
+    done = False
+    step_count = 0
+    total_reward = 0
+    
+    while not done and step_count < max_steps:
+        # For now using a simple action (0), this would be replaced with your agent's policy
+        action = 0  
+        obs, reward, done, info = env.step(action)
+        
+        print(obs)
+        frontend = {'step': step_count,
+            'objects': [{"filename": "agent", "position": obs[:3].tolist(), "orientation": obs[3:7].tolist()}]
+        }
+        for a, object_name in enumerate(object_names):
+            frontend['objects'].append({"filename": f"{object_name[:-3]}urdf", "position": obs[7+7*a:10+7*a].tolist(), "orientation": obs[10+7*a:14+7*a].tolist()})
+
+        await sio.emit('simulation_step', frontend, room=sid)
+        asyncio.sleep(0.2)
+        total_reward += reward
+        step_count += 1
+
+        
+        if reward == 1:
+            print(f"Collision detected at step {step_count}. Reward: {reward}")
+            break
+    
+    print(f"Training finished after {step_count} steps. Total reward: {total_reward}")
+    return {"steps": step_count, "total_reward": total_reward, "done": done}
+
+
 
 
 
