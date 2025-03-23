@@ -15,7 +15,7 @@ def upload_object(envid, id):
     try:
         data = request.get_data()
         bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(f"environments/{envid}/files/file"+str(id)+".txt")
+        blob = bucket.blob(f"environments/{envid}/files/file"+str(id)+".data")
         blob.upload_from_string(data)
         return jsonify({"message": "Object uploaded successfully"}), 200
     except Exception as e:
@@ -25,7 +25,7 @@ def upload_object(envid, id):
 def download_object(envid, id):
     try:
         bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(f"environments/{envid}/files/file"+str(id)+".txt")
+        blob = bucket.blob(f"environments/{envid}/files/file"+str(id)+".data")
         data = blob.download_as_string()
         return data, 200
     except Exception as e:
