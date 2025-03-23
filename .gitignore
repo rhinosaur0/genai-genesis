@@ -53,3 +53,5 @@ model/
 terraform.rc
 crash.log
 .terraform.lock.hcl
+
+*.obj

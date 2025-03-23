@@ -5,12 +5,15 @@ import uvicorn
 from pybullet_env.env import BulletEnv
 from fastapi.middleware.cors import CORSMiddleware
 from pybullet_env.trainer import Trainer
-
+from google.cloud import storage
 import os
 import xml.etree.ElementTree as ET
 from kubernetes import client, config
+import pybullet as p
+import tempfile
 
 app = FastAPI()
+storage_client = storage.Client()
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,16 +66,52 @@ def update_urdf_position(urdf_path, position, orientation):
     except Exception as e:
         print(f"Error updating URDF {urdf_path}: {e}")
         return False
+    
+def download_env_from_gcp(env_name):
+    """
+    Download all files (URDF and OBJ) from the GCP bucket for the given environment
+    into a temporary local directory while preserving folder structure.
+    """
+    bucket = storage.Client().bucket("genai-genesis-storage")
+    local_dir = tempfile.mkdtemp()
+    
+    # Assume your objects are stored under objects/{env_name}/...
+    prefix = f"{env_name}/objects"
+    blobs = bucket.list_blobs(prefix=prefix)
+    
+    for blob in blobs:
+        # Reconstruct local path
+        relative_path = blob.name[len(prefix):]  # file path relative to env folder
+        local_file_path = os.path.join(local_dir, relative_path)
+        os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+        blob.download_to_filename(local_file_path)
+    
+    
+    return local_dir
+
+
+
+# Find and load all URDF files in the local environment directory
+
+
 
 @app.post("/upload_filename")
 async def upload_filename(payload: FilenamePayload):
     """
     Upload a filename and find the corresponding .obj file.
     """
+    download_env_from_gcp(payload.filename)
+
     return {
         "status": "success",
         "message": f"Filename {payload.filename} received"
     }
+
+@app.post("/fetch_environment")
+async def fetch_environment():
+    return
+
+
 
 @app.post("/upload_position")
 async def upload_position(payload: PositionPayload):
