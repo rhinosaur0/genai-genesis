@@ -75,8 +75,14 @@ class SegmentationService:
                 "message": str(e)
             }
 
-# Create a single instance of the service
-segmentation_service = SegmentationService()
+# Dont initalize immediatley due to large model size
+segmentation_service = None
+
+def get_segmentation_service():
+    global segmentation_service
+    if segmentation_service is None:
+        segmentation_service = SegmentationService()
+    return segmentation_service
 
 @app.route('/segment', methods=['POST'])
 def segment_image_endpoint():
@@ -90,6 +96,9 @@ def segment_image_endpoint():
     }
     """
     try:
+        # This will take a while to load the model
+        service = get_segmentation_service()
+
         data = request.get_json()
         
         if not data or 'image' not in data or 'prompts' not in data:
@@ -103,7 +112,7 @@ def segment_image_endpoint():
         threshold = data.get('threshold', 0.8)
         
         # Process the image
-        result = segmentation_service.process_image(image_data, prompts, threshold)
+        result = service.process_image(image_data, prompts, threshold)
         return jsonify(result)
     
     except Exception as e:
