@@ -1,6 +1,6 @@
 gymnasium==1.0.0
-numpy==1.26.4
 pybullet==3.2.7
 pybullet_envs_gymnasium==0.6.0
 stable_baselines3==2.5.0
-torch==2.6.0
+tensorboard==2.19.0
+numpy==1.26.4

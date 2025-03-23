@@ -29,9 +29,7 @@ def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
     blob.upload_from_filename(source_file_name)
     logger.info(f"Uploaded {source_file_name} to {destination_blob_name}")
 
-# Create logs directory in the project
-log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
-# Make sure the directory exists
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 os.makedirs(log_dir, exist_ok=True)
 stats_path = os.path.join(log_dir, "vec_normalize.pkl")
 
@@ -63,15 +61,21 @@ def train(env_id="HalfCheetahBulletEnv-v0"):
     model.save(model_path)
     vec_env.save(stats_path)
 
-    # Upload model and stats to GCS under test-train directory
-    upload_to_gcs(bucket_name, f"{model_path}.zip", "test-train/models/ant_agent_latest.zip")
-    upload_to_gcs(bucket_name, stats_path, "test-train/models/vec_normalize.pkl")
+    try:
+        # Upload model and stats to GCS under test-train directory
+        upload_to_gcs(bucket_name, f"{model_path}.zip", "test-train/models/ant_agent_latest.zip")
+        upload_to_gcs(bucket_name, stats_path, "test-train/models/vec_normalize.pkl")
+    except Exception as e:
+        logger.error(f"Failed to upload model and stats: {e}")
     
-    # Upload tensorboard logs under test-train directory
-    for file in os.listdir(os.path.join(log_dir, "tensorboard")):
-        source_path = os.path.join(log_dir, "tensorboard", file)
-        if os.path.isfile(source_path):
-            upload_to_gcs(bucket_name, source_path, f"test-train/logs/tensorboard/{file}")
+    try: 
+        # Upload tensorboard logs under test-train directory
+        for file in os.listdir(os.path.join(log_dir, "tensorboard")):
+            source_path = os.path.join(log_dir, "tensorboard", file)
+            if os.path.isfile(source_path):
+                upload_to_gcs(bucket_name, source_path, f"test-train/logs/tensorboard/{file}")
+    except Exception as e:
+        logger.error(f"Failed to upload tensorboard logs: {e}")
 
     return model_path
 
