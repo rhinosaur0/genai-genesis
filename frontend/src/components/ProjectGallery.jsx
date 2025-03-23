@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../utils/AuthContext';
 import { getUserEnvironments, createEnvironment, deleteEnvironment } from '../utils/firebase';
-import axios from 'axios';
+import { io } from 'socket.io-client';
+import * as THREE from 'three';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 const spin = keyframes`
   0% { transform: rotate(0deg); }
@@ -427,6 +430,106 @@ const LoadingSpinner = styled.div`
   margin-right: 8px;
 `;
 
+const ObjectTestOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+`;
+
+const OverlayHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: rgba(30, 27, 38, 0.9);
+  border-bottom: 1px solid rgba(123, 104, 238, 0.3);
+`;
+
+const OverlayTitle = styled.h3`
+  color: #f5f5f7;
+  margin: 0;
+`;
+
+const OverlayCloseButton = styled.button`
+  background: transparent;
+  border: none;
+  color: #f5f5f7;
+  font-size: 1.5rem;
+  cursor: pointer;
+  
+  &:hover {
+    color: #7b68ee;
+  }
+`;
+
+const CanvasContainer = styled.div`
+  flex: 1;
+  position: relative;
+`;
+
+const ObjectInfo = styled.div`
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(30, 27, 38, 0.8);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(123, 104, 238, 0.3);
+  color: white;
+  max-width: 300px;
+  font-size: 14px;
+`;
+
+const SimulationButton = styled.button`
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background-color: #7b68ee;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  z-index: 100;
+  
+  &:hover {
+    background-color: #6a57dd;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(123, 104, 238, 0.4);
+  }
+  
+  &:disabled {
+    background-color: rgba(123, 104, 238, 0.5);
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+`;
+
+const SimulationStatus = styled.div`
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  background: rgba(30, 27, 38, 0.8);
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(123, 104, 238, 0.3);
+  color: white;
+  font-size: 14px;
+  z-index: 100;
+`;
+
 const ProjectGallery = ({ onSelectProject }) => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -439,7 +542,240 @@ const ProjectGallery = ({ onSelectProject }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+  const [objectFiles, setObjectFiles] = useState({});
+  const [showObjectTest, setShowObjectTest] = useState(false);
+  const [objectTestInfo, setObjectTestInfo] = useState(null);
+  const testCanvasRef = useRef(null);
+  const testSceneRef = useRef(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationStep, setSimulationStep] = useState(0);
+  const simulationObjectsRef = useRef({});
+
   const { currentUser, logout } = useAuth();
+
+  const socket = useRef(null);
+  useEffect(() => {
+    socket.current = io("http://localhost:8000");
+    socket.current.on("connect", () => {
+      console.log("Connected to socket server");
+    });
+    // Listen for streamed data from the server.
+    socket.current.on("upload_filename_response", (data) => {
+      console.log("Received filename response:", data);
+      const newObjectFiles = {};
+      
+      Object.keys(data).forEach((key) => {
+        const fileData = data[key];
+        if (fileData.obj_file_data) {
+          // Store the raw object file data
+          newObjectFiles[key] = {
+            objData: atob(fileData.obj_file_data),
+            position: fileData.position,
+            orientation: fileData.orientation
+          };
+        }
+      });
+      
+      setObjectFiles(newObjectFiles);
+      
+      // If objects were received, show the test overlay
+      if (Object.keys(newObjectFiles).length > 0) {
+        setShowObjectTest(true);
+      }
+    });
+
+    return () => {
+      if (socket.current) {
+        socket.current.disconnect();
+      }
+    };
+  }, []);
+
+  // Set up the Three.js test scene when objects are received
+  useEffect(() => {
+    if (showObjectTest && testCanvasRef.current && Object.keys(objectFiles).length > 0) {
+      // Initialize Three.js scene
+      const canvas = testCanvasRef.current;
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111111);
+      testSceneRef.current = scene;
+
+      // Set up renderer
+      const renderer = new THREE.WebGLRenderer({ 
+        canvas, 
+        antialias: true 
+      });
+      renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+
+      // Set up camera
+      const camera = new THREE.PerspectiveCamera(
+        75, 
+        canvas.clientWidth / canvas.clientHeight, 
+        0.1, 
+        1000
+      );
+      camera.position.z = 5;
+
+      // Add orbit controls
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+
+      // Add lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(1, 1, 1);
+      scene.add(directionalLight);
+      
+      const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
+      backLight.position.set(-1, -1, -1);
+      scene.add(backLight);
+
+      // Add grid helper for reference
+      const gridHelper = new THREE.GridHelper(10, 10);
+      scene.add(gridHelper);
+
+      // Add axes helper
+      const axesHelper = new THREE.AxesHelper(5);
+      scene.add(axesHelper);
+
+      // Clear any previous object references
+      simulationObjectsRef.current = {};
+
+      // Load objects
+      const loader = new OBJLoader();
+      let loadedObjects = 0;
+      let totalObjects = Object.keys(objectFiles).length;
+      
+      Object.entries(objectFiles).forEach(([key, fileData]) => {
+        try {
+          console.log(`Loading object ${key}...`);
+          setObjectTestInfo(`Loading object ${key}...`);
+          
+          // Parse the OBJ data
+          const object3D = loader.parse(fileData.objData);
+          
+          // Set position if available
+          if (fileData.position) {
+            object3D.position.set(...fileData.position);
+          }
+          
+          // Set orientation if available
+          if (fileData.orientation) {
+            object3D.rotation.set(...fileData.orientation);
+          }
+          
+          // Add default material if the object doesn't have one
+          object3D.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              if (!child.material) {
+                child.material = new THREE.MeshStandardMaterial({ 
+                  color: 0x7b68ee,
+                  metalness: 0.3,
+                  roughness: 0.4
+                });
+              }
+            }
+          });
+          
+          // Add to scene
+          scene.add(object3D);
+          loadedObjects++;
+          
+          // Store reference to the object for simulation
+          simulationObjectsRef.current[key] = object3D;
+
+          console.log(`Object ${key} loaded successfully.`);
+          setObjectTestInfo(`Loaded ${loadedObjects}/${totalObjects} objects. Last: ${key}`);
+        } catch (error) {
+          console.error(`Error loading object ${key}:`, error);
+          setObjectTestInfo(`Error loading object ${key}: ${error.message}`);
+        }
+      });
+
+      // Animation loop
+      const animate = () => {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      };
+      animate();
+
+      // Handle window resize
+      const handleResize = () => {
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
+        
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        
+        renderer.setSize(width, height);
+      };
+      
+      window.addEventListener('resize', handleResize);
+      
+      // Clean up
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        // Dispose of Three.js resources
+        scene.traverse((object) => {
+          if (object.geometry) object.geometry.dispose();
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach(material => material.dispose());
+            } else {
+              object.material.dispose();
+            }
+          }
+        });
+        renderer.dispose();
+      };
+    }
+  }, [showObjectTest, objectFiles]);
+
+  // Add socket listener for simulation updates
+  useEffect(() => {
+    if (!socket.current) return;
+
+    // Listen for object position updates from the server
+    socket.current.on("simulation_step", (data) => {
+      console.log("Received simulation step:", data);
+      setSimulationStep(data.step);
+      
+      // Update object positions
+      if (data.objects && testSceneRef.current) {
+        // Find objects in the scene and update their positions
+        data.objects.forEach(obj => {
+          if (simulationObjectsRef.current[obj.filename]) {
+            const object3D = simulationObjectsRef.current[obj.filename];
+            object3D.position.set(...obj.position);
+            if (obj.orientation) {
+              object3D.rotation.set(...obj.orientation);
+            }
+          }
+        });
+      }
+    });
+
+    return () => {
+      socket.current.off("simulation_step");
+    };
+  }, []);
+
+  const closeObjectTest = () => {
+    setShowObjectTest(false);
+  };
+
+  const handleProjectSelect = (project) => {
+    // Pass both the project data and any associated object files
+    onSelectProject({
+      ...project,
+      objectFiles: objectFiles
+    });
+  };
   
   const fetchProjects = async () => {
     if (!currentUser) {
@@ -535,14 +871,8 @@ const ProjectGallery = ({ onSelectProject }) => {
           uid: currentUser.uid
         };
         
-        // Make the POST request to the backend
-        const uploadResponse = await axios.post('http://localhost:8000/upload_filename', filenamePayload);
-        
-        if (uploadResponse.data.status === 'success') {
-          console.log("Filename upload successful:", uploadResponse.data);
-        } else {
-          console.warn("Filename upload returned error:", uploadResponse.data);
-        }
+        // Make the POST request to the backend through socket
+        socket.current.emit("upload_filename", filenamePayload);
       } catch (uploadError) {
         console.error("Error uploading filename:", uploadError);
       }
@@ -644,6 +974,38 @@ const ProjectGallery = ({ onSelectProject }) => {
     }
   };
   
+  const startSimulation = () => {
+    if (!socket.current || isSimulating) return;
+    
+    setIsSimulating(true);
+    setSimulationStep(0);
+    
+    // Emit event to start simulation
+    socket.current.emit("start_simulation", {
+      objects: Object.keys(objectFiles).map(key => ({
+        filename: key,
+        // Include current position if available
+        position: simulationObjectsRef.current[key] 
+          ? [
+              simulationObjectsRef.current[key].position.x,
+              simulationObjectsRef.current[key].position.y,
+              simulationObjectsRef.current[key].position.z
+            ]
+          : [0, 0, 0],
+        // Include current orientation if available
+        orientation: simulationObjectsRef.current[key]
+          ? [
+              simulationObjectsRef.current[key].rotation.x,
+              simulationObjectsRef.current[key].rotation.y,
+              simulationObjectsRef.current[key].rotation.z
+            ]
+          : [0, 0, 0]
+      }))
+    });
+    
+    console.log("Simulation started");
+  };
+
   if (!currentUser) {
     return (
       <GalleryContainer>
@@ -768,7 +1130,7 @@ const ProjectGallery = ({ onSelectProject }) => {
       ) : (
         <ProjectsGrid>
           {projects.map((project) => (
-            <ProjectCard key={project.id} onClick={() => onSelectProject(project)}>
+            <ProjectCard key={project.id} onClick={() => handleProjectSelect(project)}>
               <DeleteButton 
                 onClick={(e) => handleDeleteProject(e, project.id)}
                 disabled={isDeletingProject}
@@ -864,8 +1226,47 @@ const ProjectGallery = ({ onSelectProject }) => {
           </ModalContent>
         </Modal>
       )}
+      
+      {showObjectTest && (
+        <ObjectTestOverlay>
+          {/* <OverlayHeader>
+            <OverlayTitle>Testing 3D Object Loading</OverlayTitle>
+            <OverlayCloseButton onClick={closeObjectTest}>&times;</OverlayCloseButton>
+          </OverlayHeader> */}
+          <CanvasContainer>
+            <canvas 
+              ref={testCanvasRef} 
+              style={{ width: '100%', height: '100%' }} 
+            />
+            {objectTestInfo && (
+              <ObjectInfo>
+                <div><strong>Object Info:</strong></div>
+                <div>{objectTestInfo}</div>
+                <div style={{ marginTop: '5px', fontSize: '12px' }}>
+                  <em>Use mouse to rotate, scroll to zoom</em>
+                </div>
+              </ObjectInfo>
+            )}
+            
+            {/* Add simulation button */}
+            <SimulationButton 
+              onClick={startSimulation}
+              disabled={isSimulating || Object.keys(simulationObjectsRef.current).length === 0}
+            >
+              {isSimulating ? 'Simulating...' : 'Start Simulation'}
+            </SimulationButton>
+            
+            {/* Add simulation status if active */}
+            {isSimulating && (
+              <SimulationStatus>
+                Simulation Step: {simulationStep}/20
+              </SimulationStatus>
+            )}
+          </CanvasContainer>
+        </ObjectTestOverlay>
+      )}
     </GalleryContainer>
   );
 };
 
-export default ProjectGallery; 
+export default ProjectGallery;
