@@ -107,7 +107,7 @@ export const createEnvironment = async (userId, environmentData) => {
       created_at: new Date(),
       updated_at: new Date()
     });
-    
+
     // Add the environment ID to the user's owned_environments array
     console.log(`Adding environment ${newEnvironmentRef.id} to user's owned_environments`);
     const userRef = doc(db, "users", userId);

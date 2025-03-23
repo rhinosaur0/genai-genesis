@@ -22,4 +22,8 @@ RUN chown -R appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
-CMD ["python", "main.py"]
+# Set port environment variable
+ENV PORT=8080
+
+# Use gunicorn with proper timeout settings
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8", "--timeout", "0", "main:app"]

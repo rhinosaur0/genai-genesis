@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { askGemini } from '../utils/geminiApi';
 import ReactMarkdown from 'react-markdown';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader';
 
 const ViewerContainer = styled.div`
   width: 100%;
@@ -597,9 +598,9 @@ function ModelViewer({ modelData, onBack, projectData }) {
   }, []);
   
   useEffect(() => {
-    if (!modelData || !modelData.model) return;
-    
-    // Set up Three.js scene
+    console.log("Model data changed:", modelData);
+    if (!modelData) return;
+
     const canvas = canvasRef.current;
     const container = frameRef.current;
     
@@ -634,21 +635,48 @@ function ModelViewer({ modelData, onBack, projectData }) {
     controls.dampingFactor = 0.05;
     controlsRef.current = controls;
     
-    // Add ambient light
+    // Add lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
     
-    // Add directional light
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
     
-    // Add backup light from other angles
     const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
     backLight.position.set(-1, -1, -1);
     scene.add(backLight);
-    
-    // Setup animation loop
+
+    // Load object files if they exist
+Object.keys(objectFiles).forEach((key) => {
+  const objInfo = objectFiles[key];
+  loader.load(
+    objInfo.url,
+    (object) => {
+      // Set position and orientation if provided
+      object.position.set(
+        objInfo.position.x,
+        objInfo.position.y,
+        objInfo.position.z
+      );
+      object.rotation.set(
+        objInfo.orientation.x,
+        objInfo.orientation.y,
+        objInfo.orientation.z
+      );
+
+      scene.add(object);
+    },
+    (xhr) => {
+      console.log(`${(xhr.loaded / xhr.total) * 100}% loaded`);
+    },
+    (error) => {
+      console.error('An error occurred while loading the object:', error);
+    }
+  );
+});
+
+    // Animation loop
     const animate = () => {
       requestRef.current = requestAnimationFrame(animate);
       
@@ -660,31 +688,10 @@ function ModelViewer({ modelData, onBack, projectData }) {
         rendererRef.current.render(sceneRef.current, cameraRef.current);
       }
     };
-    
-    // Load 3D model
-    const loader = new THREE.ObjectLoader();
-    const modelUrl = modelData.model;
-    
-    // Clear any existing model
-    if (objectRef.current && sceneRef.current) {
-      sceneRef.current.remove(objectRef.current);
-    }
-    
-    // TODO: Replace with your actual model loading code
-    // This is just a placeholder for a cube
-    const geometry = new THREE.BoxGeometry();
-    const material = new THREE.MeshStandardMaterial({ color: 0x7b68ee });
-    const cube = new THREE.Mesh(geometry, material);
-    sceneRef.current.add(cube);
-    objectRef.current = cube;
-    
+
     // Handle window resize
     const handleResize = () => {
-      if (
-        cameraRef.current &&
-        rendererRef.current &&
-        frameRef.current
-      ) {
+      if (cameraRef.current && rendererRef.current && frameRef.current) {
         const container = frameRef.current;
         const width = container.clientWidth;
         const height = container.clientHeight;
@@ -699,7 +706,6 @@ function ModelViewer({ modelData, onBack, projectData }) {
     window.addEventListener('resize', handleResize);
     animate();
     
-    // Cleanup function
     return () => {
       cancelAnimationFrame(requestRef.current);
       window.removeEventListener('resize', handleResize);
@@ -1077,4 +1083,4 @@ function ModelViewer({ modelData, onBack, projectData }) {
   );
 }
 
-export default ModelViewer; 
+export default ModelViewer;
