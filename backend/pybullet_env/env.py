@@ -64,6 +64,10 @@ class BulletEnv(gym.Env):
         if detect_collision(self.agent.body_id, self.target_object.body_id):
             reward = 1.0
             self.done = True
+
+        user_input = input("Press 'c' to capture state, or just press Enter to continue: ")
+        if user_input.lower() == "c":
+            self.target_object.save_positions_to_urdf("target_object.urdf")
         return obs, reward, self.done, {}
 
     def render(self, mode="human"):
