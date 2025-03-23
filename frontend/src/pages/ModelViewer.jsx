@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import askGemini from '../utils/geminiApi';
+import { askGemini } from '../utils/geminiApi';
 import ReactMarkdown from 'react-markdown';
 
 const ViewerContainer = styled.div`
@@ -102,6 +102,8 @@ const BackButton = styled.button`
   align-items: center;
   gap: 8px;
   z-index: 10;
+  font-size: 0.9rem;
+  font-weight: 500;
   
   &:hover {
     background: rgba(123, 104, 238, 0.4);
@@ -490,6 +492,23 @@ const ResizeHandle = styled.div`
   }
 `;
 
+const ViewerTitle = styled.h2`
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: white;
+  background: rgba(30, 27, 38, 0.7);
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(123, 104, 238, 0.3);
+  z-index: 5;
+  font-family: "SF Mono", "Roboto Mono", "Fira Code", monospace;
+  font-size: 1.2rem;
+  margin: 0;
+  text-align: center;
+`;
+
 // Create a custom hook for drag functionality
 function useDraggableWidth(initialWidth, minWidth, maxWidth) {
   const [width, setWidth] = useState(initialWidth);
@@ -537,75 +556,83 @@ function useDraggableWidth(initialWidth, minWidth, maxWidth) {
     };
   }, [isDragging, minWidth, maxWidth]);
   
-  return { width, isDragging, handleMouseDown };
+  return [width, setWidth, isDragging, handleMouseDown];
 }
 
-function ModelViewer({ modelData, onBack }) {
-  const [activeMode, setActiveMode] = useState('view');
-  const [showInfo, setShowInfo] = useState(true);
-  const [chatInput, setChatInput] = useState('');
-  const [chatMessages, setChatMessages] = useState([
-    { id: 1, text: "Hello! I'm your AI assistant. Ask me anything about this 3D model or how to interact with it.", isUser: false }
-  ]);
+function ModelViewer({ modelData, onBack, projectData }) {
+  const [sidebarWidth, setSidebarWidth, isDraggingSidebar, handleSidebarMouseDown] = useDraggableWidth(250, 150, 400);
+  const [chatSidebarWidth, setChatSidebarWidth, isDraggingChatSidebar, handleChatSidebarMouseDown] = useDraggableWidth(300, 250, 600);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isChatOpen, setIsChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [particles, setParticles] = useState([]);
+  const [message, setMessage] = useState('');
+  const [chatHistory, setChatHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Use the custom hook for sidebar and chat sidebar
-  const sidebar = useDraggableWidth(250, 150, 400);
-  const chatSidebar = useDraggableWidth(350, 250, 600);
-  
-  const containerRef = useRef(null);
-  const threeRef = useRef(null);
-  const cameraRef = useRef(null);
+  const [viewMode, setViewMode] = useState('view'); // 'view', 'edit', 'train'
+  const canvasRef = useRef(null);
   const sceneRef = useRef(null);
   const rendererRef = useRef(null);
+  const cameraRef = useRef(null);
   const controlsRef = useRef(null);
-  const animationIdRef = useRef(null);
-  const chatEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const frameRef = useRef(null);
+  const objectRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const requestRef = useRef(null);
   
-  const [particles, setParticles] = useState([]);
-  
-  // Auto resize chat input as text changes
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 150)}px`;
-    }
-  }, [chatInput]);
-  
-  // Generate random particles for background
+  // Generate random particles
   useEffect(() => {
     const newParticles = [];
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 15; i++) {
       newParticles.push({
         id: i,
-        size: Math.random() * 4 + 2,
+        size: Math.random() * 3 + 2,
         left: Math.random() * 100,
         top: Math.random() * 100,
-        opacity: Math.random() * 0.4 + 0.1,
-        color: i % 5 === 0 ? '#9370db' : '#7b68ee',
-        speed: `${Math.random() * 20 + 10}s`,
-        delay: `${Math.random() * 5}s`
+        opacity: Math.random() * 0.3 + 0.1,
+        speed: Math.random() * 20 + 10 + 's',
+        delay: Math.random() * 5 + 's'
       });
     }
     setParticles(newParticles);
   }, []);
   
   useEffect(() => {
-    // Scroll to bottom of chat when messages change
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
-  
-  // Set up Three.js scene
-  useEffect(() => {
-    if (!threeRef.current) return;
+    if (!modelData || !modelData.model) return;
     
-    // Set up scene
+    // Set up Three.js scene
+    const canvas = canvasRef.current;
+    const container = frameRef.current;
+    
+    // Create scene
     const scene = new THREE.Scene();
-    sceneRef.current = scene;
     scene.background = new THREE.Color(0x13111a);
+    sceneRef.current = scene;
+    
+    // Create camera
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      container.clientWidth / container.clientHeight,
+      0.1,
+      1000
+    );
+    camera.position.z = 5;
+    cameraRef.current = camera;
+    
+    // Create renderer
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true
+    });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    rendererRef.current = renderer;
+    
+    // Add orbit controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controlsRef.current = controls;
     
     // Add ambient light
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -613,148 +640,132 @@ function ModelViewer({ modelData, onBack }) {
     
     // Add directional light
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(5, 10, 7.5);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
+    directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
     
-    // Add camera
-    const camera = new THREE.PerspectiveCamera(
-      75, 
-      threeRef.current.clientWidth / threeRef.current.clientHeight,
-      0.1,
-      1000
-    );
-    camera.position.set(0, 1.5, 4);
+    // Add backup light from other angles
+    const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    backLight.position.set(-1, -1, -1);
+    scene.add(backLight);
     
-    // Add renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(threeRef.current.clientWidth, threeRef.current.clientHeight);
-    renderer.shadowMap.enabled = true;
-    threeRef.current.appendChild(renderer.domElement);
-    
-    // Add orbit controls
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 2;
-    controls.maxDistance = 10;
-    controlsRef.current = controls;
-    
-    // Add floor
-    const floorGeometry = new THREE.PlaneGeometry(20, 20);
-    const floorTexture = new THREE.TextureLoader().load('/floor-texture.jpg');
-    floorTexture.wrapS = THREE.RepeatWrapping;
-    floorTexture.wrapT = THREE.RepeatWrapping;
-    floorTexture.repeat.set(8, 8);
-    const floorMaterial = new THREE.MeshStandardMaterial({ 
-      map: floorTexture,
-      side: THREE.DoubleSide,
-      roughness: 0.8,
-      metalness: 0.2
-    });
-    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-    floor.rotation.x = Math.PI / 2;
-    floor.position.y = -1;
-    floor.receiveShadow = true;
-    scene.add(floor);
-    
-    // Add sample cube
-    const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-    const cubeMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x7b68ee,
-      roughness: 0.5,
-      metalness: 0.5
-    });
-    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-    cube.position.y = 0;
-    cube.castShadow = true;
-    scene.add(cube);
-    
-    // Animation loop
+    // Setup animation loop
     const animate = () => {
-      requestAnimationFrame(animate);
+      requestRef.current = requestAnimationFrame(animate);
       
-      if (cube) {
-        cube.rotation.y += 0.005;
+      if (controlsRef.current) {
+        controlsRef.current.update();
       }
       
-      controls.update();
-      renderer.render(scene, camera);
+      if (rendererRef.current && sceneRef.current && cameraRef.current) {
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
+      }
     };
     
-    animate();
+    // Load 3D model
+    const loader = new THREE.ObjectLoader();
+    const modelUrl = modelData.model;
+    
+    // Clear any existing model
+    if (objectRef.current && sceneRef.current) {
+      sceneRef.current.remove(objectRef.current);
+    }
+    
+    // TODO: Replace with your actual model loading code
+    // This is just a placeholder for a cube
+    const geometry = new THREE.BoxGeometry();
+    const material = new THREE.MeshStandardMaterial({ color: 0x7b68ee });
+    const cube = new THREE.Mesh(geometry, material);
+    sceneRef.current.add(cube);
+    objectRef.current = cube;
     
     // Handle window resize
     const handleResize = () => {
-      if (!threeRef.current) return;
-      
-      camera.aspect = threeRef.current.clientWidth / threeRef.current.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(threeRef.current.clientWidth, threeRef.current.clientHeight);
+      if (
+        cameraRef.current &&
+        rendererRef.current &&
+        frameRef.current
+      ) {
+        const container = frameRef.current;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        cameraRef.current.aspect = width / height;
+        cameraRef.current.updateProjectionMatrix();
+        
+        rendererRef.current.setSize(width, height);
+      }
     };
     
     window.addEventListener('resize', handleResize);
+    animate();
     
-    // Cleanup
+    // Cleanup function
     return () => {
+      cancelAnimationFrame(requestRef.current);
       window.removeEventListener('resize', handleResize);
-      threeRef.current?.removeChild(renderer.domElement);
-      scene.clear();
+      
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+      }
     };
-  }, []);
+  }, [modelData]);
   
-  // Updated message handler to use Gemini API
   const handleSendMessage = async () => {
-    if (!chatInput.trim()) return;
+    if (!message.trim()) return;
     
-    // Format user message for display - convert triple quotes to markdown code blocks
-    let formattedUserInput = chatInput;
-    if (chatInput.includes("'''")) {
-      formattedUserInput = chatInput.replace(/'''\s*([\s\S]*?)\s*'''/g, '```\n$1\n```');
-    }
-    
-    // Add user message to chat
     const userMessage = {
-      id: chatMessages.length + 1,
-      text: formattedUserInput,
-      isUser: true
+      id: Date.now(),
+      text: message,
+      sender: 'user'
     };
     
-    setChatMessages(prev => [...prev, userMessage]);
-    setChatInput('');
+    setChatHistory([...chatHistory, userMessage]);
+    setMessage('');
     setIsLoading(true);
     
     try {
-      // Use the utility function instead of implementing the API call here
-      const aiResponse = await askGemini(chatInput); // Send original input to API
+      // Create a context-aware prompt for the AI
+      const promptWithContext = `You are an AI assistant helping with a 3D model project${
+        projectData?.name ? ` called "${projectData.name}"` : ""
+      }${
+        projectData?.description ? ` with the description: "${projectData.description}"` : ""
+      }. The user is in ${viewMode} mode. 
       
-      // Format AI response - convert triple quotes to markdown code blocks
-      let formattedResponse = aiResponse;
-      if (aiResponse.includes("'''")) {
-        formattedResponse = aiResponse.replace(/'''\s*([\s\S]*?)\s*'''/g, '```\n$1\n```');
-      }
+      User message: ${message}`;
       
-      // Add AI response to chat
-      setChatMessages(prev => [...prev, {
-        id: prev.length + 1,
-        text: formattedResponse,
-        isUser: false
-      }]);
+      // Get response from Gemini
+      const response = await askGemini(promptWithContext);
+      
+      const aiMessage = {
+        id: Date.now() + 1,
+        text: response,
+        sender: 'ai'
+      };
+      
+      setChatHistory(prev => [...prev, aiMessage]);
     } catch (error) {
-      console.error('Error processing request:', error);
-      setChatMessages(prev => [...prev, {
-        id: prev.length + 1,
-        text: "Sorry, there was an error processing your request.",
-        isUser: false
-      }]);
+      console.error("Error getting AI response:", error);
+      
+      const errorMessage = {
+        id: Date.now() + 1,
+        text: "Sorry, I couldn't process your request. Please try again.",
+        sender: 'ai',
+        isError: true
+      };
+      
+      setChatHistory(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      
+      // Scroll to the bottom of the chat
+      if (chatContainerRef.current) {
+        setTimeout(() => {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }, 100);
+      }
     }
   };
   
-  // Update handleKeyPress to support Shift+Enter for new lines
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -763,214 +774,305 @@ function ModelViewer({ modelData, onBack }) {
   };
   
   const getModeDescription = () => {
-    switch(activeMode) {
-      case 'edit': return 'Edit Mode: Modify your 3D model';
-      case 'train': return 'Train Mode: Teach your model new behaviors';
-      default: return 'View Mode: Explore your 3D model';
+    switch (viewMode) {
+      case 'edit': return 'Edit Mode';
+      case 'train': return 'Training Mode';
+      default: return 'View Mode';
     }
   };
-
-  // Handle sidebar button actions
+  
   const handleEditButton = () => {
-    setActiveMode('edit');
-    // Additional edit logic can go here
+    setViewMode('edit');
   };
   
   const handleViewButton = () => {
-    setActiveMode('view');
-    // Additional view logic can go here
+    setViewMode('view');
   };
   
   const handleTrainButton = () => {
-    setActiveMode('train');
-    // Additional train logic can go here
+    setViewMode('train');
+  };
+  
+  const handleBackToProjects = () => {
+    // Clean up any resources before navigating back
+    if (rendererRef.current) {
+      rendererRef.current.dispose();
+    }
+    
+    // Call the provided onBack function to navigate back
+    if (onBack && typeof onBack === 'function') {
+      onBack();
+    }
   };
   
   return (
-    <ViewerContainer ref={containerRef}>
-      {/* Left Sidebar */}
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        width={sidebarOpen ? sidebar.width : 40} 
-        isDragging={sidebar.isDragging}
-      >
+    <ViewerContainer>
+      <Sidebar width={sidebarWidth} isOpen={sidebarOpen} isDragging={isDraggingSidebar}>
         <SidebarToggle onClick={() => setSidebarOpen(!sidebarOpen)}>
-          {sidebarOpen ? '◀' : '▶'}
+          {sidebarOpen ? '←' : '→'}
         </SidebarToggle>
-        <SidebarContent isOpen={sidebarOpen}>
-          <h3>Tools</h3>
-          <ActionButton onClick={handleEditButton}>Edit</ActionButton>
-          <ActionButton onClick={handleViewButton}>View</ActionButton>
-          <ActionButton onClick={handleTrainButton}>Train</ActionButton>
-          <ActionButton onClick={() => setIsChatOpen(!isChatOpen)}>
-            {isChatOpen ? 'Hide Chat' : 'Show Chat'}
-          </ActionButton>
-          <ActionButton onClick={onBack}>Back to Home</ActionButton>
-          
-          <h3 style={{ marginTop: '30px' }}>Mode Details</h3>
-          <div style={{ fontSize: '14px', color: '#cccccc', lineHeight: '1.5' }}>
-            {getModeDescription()}
-          </div>
-        </SidebarContent>
-        {/* Resize handle for sidebar */}
+        
         {sidebarOpen && (
-          <ResizeHandle 
-            style={{ right: '-4px' }}
-            onMouseDown={sidebar.handleMouseDown}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              width: '5px',
+              height: '100%',
+              cursor: 'ew-resize'
+            }}
+            onMouseDown={handleSidebarMouseDown}
           />
         )}
+        
+        <SidebarContent isOpen={sidebarOpen}>
+          <h3>Scene Controls</h3>
+          
+          <ActionButton onClick={() => setChatOpen(!chatOpen)}>
+            {chatOpen ? 'Close Chat Assistant' : 'Open Chat Assistant'}
+          </ActionButton>
+          
+          <ActionButton onClick={handleViewButton} style={{ 
+            backgroundColor: viewMode === 'view' ? 'rgba(123, 104, 238, 0.4)' : undefined 
+          }}>
+            View Mode
+          </ActionButton>
+          
+          <ActionButton onClick={handleEditButton} style={{ 
+            backgroundColor: viewMode === 'edit' ? 'rgba(123, 104, 238, 0.4)' : undefined 
+          }}>
+            Edit Mode
+          </ActionButton>
+          
+          <ActionButton onClick={handleTrainButton} style={{ 
+            backgroundColor: viewMode === 'train' ? 'rgba(123, 104, 238, 0.4)' : undefined 
+          }}>
+            Training Mode
+          </ActionButton>
+          
+          <ActionButton>
+            Export Model
+          </ActionButton>
+          
+          <ActionButton>
+            Take Screenshot
+          </ActionButton>
+          
+          <h3 style={{ marginTop: '30px' }}>Project Settings</h3>
+          
+          <InfoCard>
+            <h4 style={{ margin: '0 0 10px 0' }}>{projectData?.name || 'Untitled Project'}</h4>
+            <p style={{ margin: '0 0 15px 0', color: '#b3b3b7', fontSize: '0.9rem' }}>
+              {projectData?.description || modelData?.prompt || 'No description available'}
+            </p>
+            <div style={{ fontSize: '0.8rem', color: '#b3b3b7' }}>
+              Created: {projectData?.created_at ? new Date(projectData.created_at.seconds * 1000).toLocaleDateString() : 'Unknown date'}
+            </div>
+          </InfoCard>
+        </SidebarContent>
       </Sidebar>
       
-      {/* Main Content */}
-      <MainContent sidebarOpen={sidebarOpen} style={{ width: `calc(100% - ${sidebarOpen ? sidebar.width : 40}px)` }}>
-        <ViewerFrame>
+      <MainContent sidebarOpen={sidebarOpen} width={sidebarWidth}>
+        <BackButton onClick={handleBackToProjects}>
+          ← Back to Projects
+        </BackButton>
+        
+        {projectData && (
+          <ViewerTitle>{projectData.name || 'Untitled Project'}</ViewerTitle>
+        )}
+        
+        <ViewerToolbar>
+          <ToolbarButton 
+            active={viewMode === 'view'} 
+            onClick={handleViewButton}
+          >
+            View
+          </ToolbarButton>
+          <ToolbarButton 
+            active={viewMode === 'edit'} 
+            onClick={handleEditButton}
+          >
+            Edit
+          </ToolbarButton>
+          <ToolbarButton 
+            active={viewMode === 'train'} 
+            onClick={handleTrainButton}
+          >
+            Train
+          </ToolbarButton>
+        </ViewerToolbar>
+        
+        <ModeIndicator>
+          {getModeDescription()}
+        </ModeIndicator>
+        
+        <ViewerFrame ref={frameRef}>
           <BackgroundGradient />
           
-          {particles.map(particle => (
-            <FloatingParticle 
+          {particles.map((particle) => (
+            <FloatingParticle
               key={particle.id}
               size={particle.size}
               left={particle.left}
               top={particle.top}
               opacity={particle.opacity}
-              color={particle.color}
               speed={particle.speed}
               delay={particle.delay}
             />
           ))}
           
-          <ThreeJSContainer ref={threeRef} />
-          
-          <ViewerToolbar>
-            <ToolbarButton 
-              active={activeMode === 'view'} 
-              onClick={() => setActiveMode('view')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              </svg>
-              View
-            </ToolbarButton>
-            
-            <ToolbarButton 
-              active={activeMode === 'edit'} 
-              onClick={() => setActiveMode('edit')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-              Edit
-            </ToolbarButton>
-            
-            <ToolbarButton 
-              active={activeMode === 'train'} 
-              onClick={() => setActiveMode('train')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-              Train
-            </ToolbarButton>
-            
-            <ToolbarButton 
-              onClick={() => setShowInfo(!showInfo)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="16" x2="12" y2="12" />
-                <line x1="12" y1="8" x2="12" y2="8" />
-              </svg>
-              {showInfo ? 'Hide Info' : 'Show Info'}
-            </ToolbarButton>
-            
-            <ToolbarButton 
-              onClick={() => setIsChatOpen(!isChatOpen)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-              {isChatOpen ? 'Hide Chat' : 'Show Chat'}
-            </ToolbarButton>
-          </ViewerToolbar>
-          
-          <ModeIndicator>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {activeMode === 'view' && <><circle cx="12" cy="12" r="3" /><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /></>}
-              {activeMode === 'edit' && <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></>}
-              {activeMode === 'train' && <><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></>}
-            </svg>
-            Mode: {activeMode.charAt(0).toUpperCase() + activeMode.slice(1)}
-          </ModeIndicator>
-          
-          {/* Floating chat button when chat is hidden */}
-          {!isChatOpen && (
-            <ChatToggleButton onClick={() => setIsChatOpen(true)}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            </ChatToggleButton>
-          )}
+          <ThreeJSContainer>
+            <canvas ref={canvasRef} />
+          </ThreeJSContainer>
         </ViewerFrame>
-      </MainContent>
-      
-      {/* Chat Sidebar - conditionally rendered */}
-      {isChatOpen && (
-        <ChatSidebar 
-          width={chatSidebar.width} 
-          isDragging={chatSidebar.isDragging}
-        >
-          {/* Resize handle for chat sidebar */}
-          <ResizeHandle 
-            style={{ left: '-4px' }}
-            onMouseDown={chatSidebar.handleMouseDown}
-          />
-          <ChatHeader>
-            <h3>AI Assistant</h3>
-            <CloseButton onClick={() => setIsChatOpen(false)}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </CloseButton>
-          </ChatHeader>
-          <ChatMessages>
-            {chatMessages.map(msg => (
-              <Message key={msg.id} isUser={msg.isUser}>
-                <ReactMarkdown>
-                  {msg.text}
-                </ReactMarkdown>
-              </Message>
-            ))}
-            {isLoading && (
-              <Message isUser={false} style={{ background: 'transparent', display: 'flex', gap: '4px' }}>
-                <div style={{ width: '8px', height: '8px', background: 'white', borderRadius: '50%', animation: 'pulse 1.5s infinite ease-in-out' }}></div>
-                <div style={{ width: '8px', height: '8px', background: 'white', borderRadius: '50%', animation: 'pulse 1.5s infinite ease-in-out 0.5s' }}></div>
-                <div style={{ width: '8px', height: '8px', background: 'white', borderRadius: '50%', animation: 'pulse 1.5s infinite ease-in-out 1s' }}></div>
-              </Message>
-            )}
-            <div ref={chatEndRef} />
-          </ChatMessages>
-          <ChatInput>
-            <Input 
-              ref={inputRef}
-              placeholder="Ask me anything... (Shift+Enter for new line, use ''' for code)"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              rows={1}
+        
+        {chatOpen && (
+          <ChatSidebar 
+            width={chatSidebarWidth} 
+            isDragging={isDraggingChatSidebar}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '5px',
+                height: '100%',
+                cursor: 'ew-resize',
+                zIndex: 100
+              }}
+              onMouseDown={handleChatSidebarMouseDown}
             />
-            <SendButton onClick={handleSendMessage}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-            </SendButton>
-          </ChatInput>
-        </ChatSidebar>
-      )}
+            
+            <div style={{ 
+              padding: '15px 20px', 
+              borderBottom: '1px solid rgba(123, 104, 238, 0.3)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <h3 style={{ margin: 0 }}>AI Assistant</h3>
+              <button
+                onClick={() => setChatOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#b3b3b7',
+                  cursor: 'pointer',
+                  fontSize: '1.5rem',
+                  fontWeight: 'bold',
+                  padding: '0 5px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div 
+              ref={chatContainerRef}
+              style={{ 
+                flex: 1, 
+                overflow: 'auto',
+                padding: '15px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '15px'
+              }}
+            >
+              {chatHistory.length === 0 ? (
+                <div style={{ 
+                  color: '#b3b3b7', 
+                  textAlign: 'center',
+                  marginTop: '30px',
+                  padding: '0 20px'
+                }}>
+                  <p>Ask me questions about your 3D environment or how to customize it!</p>
+                </div>
+              ) : (
+                chatHistory.map((msg) => (
+                  <div 
+                    key={msg.id}
+                    style={{
+                      alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                      background: msg.sender === 'user' 
+                        ? 'rgba(123, 104, 238, 0.3)' 
+                        : msg.isError 
+                          ? 'rgba(255, 107, 107, 0.2)' 
+                          : 'rgba(40, 36, 52, 0.6)',
+                      padding: '10px 15px',
+                      borderRadius: '12px',
+                      maxWidth: '85%',
+                      wordBreak: 'break-word'
+                    }}
+                  >
+                    <ReactMarkdown>
+                      {msg.text}
+                    </ReactMarkdown>
+                  </div>
+                ))
+              )}
+              
+              {isLoading && (
+                <div style={{
+                  alignSelf: 'flex-start',
+                  background: 'rgba(40, 36, 52, 0.6)',
+                  padding: '15px',
+                  borderRadius: '12px',
+                  color: '#b3b3b7'
+                }}>
+                  Thinking...
+                </div>
+              )}
+            </div>
+            
+            <div style={{ 
+              padding: '15px',
+              borderTop: '1px solid rgba(123, 104, 238, 0.3)'
+            }}>
+              <div style={{ 
+                display: 'flex',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                background: 'rgba(30, 27, 38, 0.7)',
+                border: '1px solid rgba(123, 104, 238, 0.3)'
+              }}>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Ask me anything about your scene..."
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'white',
+                    padding: '12px 15px',
+                    resize: 'none',
+                    minHeight: '50px',
+                    fontFamily: 'inherit',
+                    fontSize: '14px'
+                  }}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={isLoading || !message.trim()}
+                  style={{
+                    background: 'rgba(123, 104, 238, 0.5)',
+                    border: 'none',
+                    color: 'white',
+                    padding: '0 15px',
+                    cursor: isLoading || !message.trim() ? 'not-allowed' : 'pointer',
+                    opacity: isLoading || !message.trim() ? 0.7 : 1
+                  }}
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          </ChatSidebar>
+        )}
+      </MainContent>
     </ViewerContainer>
   );
 }

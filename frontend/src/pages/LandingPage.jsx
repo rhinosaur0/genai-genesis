@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
+import AuthForm from '../components/AuthForm';
+import { Button } from '../components/AuthForm';
+import { useAuth } from '../utils/AuthContext';
 
 const LandingContainer = styled.div`
   width: 100%;
@@ -12,7 +15,7 @@ const LandingContainer = styled.div`
   position: relative;
   background-color: #13111a;
   color: white;
-  overflow: hidden;
+  overflow-y: auto;
 `;
 
 const Title = styled.h1`
@@ -219,6 +222,9 @@ function LandingPage({ onUploadSuccess }) {
   const [prompt, setPrompt] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [particles, setParticles] = useState([]);
+  const [showAuthForm, setShowAuthForm] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const { currentUser, logout } = useAuth();
   
   // Generate random particles
   useEffect(() => {
@@ -262,6 +268,7 @@ function LandingPage({ onUploadSuccess }) {
   
   const handleDrop = (e) => {
     e.preventDefault();
+    
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       setSelectedFile(file);
@@ -277,73 +284,96 @@ function LandingPage({ onUploadSuccess }) {
   
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    if (!selectedFile || !prompt) return;
+    if (!selectedFile) return;
     
     setIsUploading(true);
     
+    // Simulate uploading and processing delay
     setTimeout(() => {
+      // In a real app, you'd send the file and prompt to your backend here
+      
+      // For now, just pass the data to the parent component
       onUploadSuccess({
-        file: selectedFile,
-        prompt: prompt,
-        modelUrl: URL.createObjectURL(selectedFile) 
+        model: '/models/sample.obj', // Hardcoded for now
+        prompt: prompt
       });
       
+      // Reset form
       setIsUploading(false);
-    }, 1500);
+      setSelectedFile(null);
+      setImagePreview(null);
+      setPrompt('');
+    }, 2000);
   };
   
+  const openAuthForm = (mode) => {
+    setAuthMode(mode);
+    setShowAuthForm(true);
+  };
+  
+  const closeAuthForm = () => {
+    setShowAuthForm(false);
+  };
+  
+  // User is logged in, show a simplified view
+  if (currentUser) {
+    return (
+      <LandingContainer>
+        <BackgroundGradient />
+        <BackgroundGrid />
+        
+        {particles.map((particle) => (
+          <FloatingParticle
+            key={particle.id}
+            size={particle.size}
+            left={particle.left}
+            top={particle.top}
+            opacity={particle.opacity}
+            duration={particle.duration}
+            speed={particle.speed}
+            delay={particle.delay}
+          />
+        ))}
+        
+        <Title>Welcome back to GenAI Genesis</Title>
+        <Subtitle>
+          Your 3D environment creation platform powered by AI
+        </Subtitle>
+        
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <Button 
+            onClick={() => onUploadSuccess({
+              model: '/models/sample.obj', // Pass the sample model
+              prompt: "Sample project"
+            })}
+            style={{ minWidth: '180px' }}
+          >
+            Try Sample Model
+          </Button>
+          
+          <Button 
+            onClick={logout} 
+            style={{ 
+              backgroundColor: 'transparent', 
+              border: '1px solid rgba(123, 104, 238, 0.5)',
+              minWidth: '120px'
+            }}
+          >
+            Logout
+          </Button>
+        </div>
+      </LandingContainer>
+    );
+  }
+  
+  // User is not logged in, show the normal landing page
   return (
     <LandingContainer>
-      {/* Dynamic background elements */}
       <BackgroundGradient />
       <BackgroundGrid />
       
-      <BackgroundShape 
-        size={400} 
-        left={-10} 
-        top={10} 
-        opacity={0.1} 
-        blur={80}
-        gradient="linear-gradient(135deg, #7b68ee 0%, #8a2be2 100%)"
-        pulse 
-        duration="20s"
-      />
-      <BackgroundShape 
-        size={300} 
-        left={80} 
-        top={60} 
-        opacity={0.1} 
-        blur={60}
-        gradient="linear-gradient(225deg, #9370db 0%, #7b68ee 100%)"
-        float 
-        duration="25s"
-        delay="2s"
-      />
-      <BackgroundShape 
-        size={200} 
-        left={60} 
-        top={20} 
-        opacity={0.15} 
-        blur={40}
-        radius="30% 70% 70% 30% / 30% 30% 70% 70%"
-        float 
-        duration="15s"
-        delay="1s"
-      />
-      <BackgroundShape 
-        size={150} 
-        left={10} 
-        top={70} 
-        opacity={0.2} 
-        blur={20}
-        radius="30% 70% 50% 50% / 60% 30% 70% 40%"
-        rotate
-        duration="40s"
-      />
-      
-      {particles.map(particle => (
-        <FloatingParticle 
+      {particles.map((particle) => (
+        <FloatingParticle
           key={particle.id}
           size={particle.size}
           left={particle.left}
@@ -355,57 +385,85 @@ function LandingPage({ onUploadSuccess }) {
         />
       ))}
       
-      <Title>3D Model Studio</Title>
+      <Title>GenAI Genesis</Title>
       <Subtitle>
-        Upload an image and a prompt to create an interactive 3D model with AI-powered chat assistance
+        Transform your images into immersive 3D environments with the power of AI
       </Subtitle>
       
-      <UploadForm onSubmit={handleSubmit}>
-        <FormTitle>Create Your 3D Model</FormTitle>
-        
-        <label htmlFor="file-upload">
-          <FileUploadArea 
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', zIndex: 10 }}>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <Button onClick={() => openAuthForm('login')}>
+            Log In
+          </Button>
+          <Button 
+            onClick={() => openAuthForm('signup')}
+            style={{ 
+              backgroundColor: 'transparent', 
+              border: '1px solid rgba(123, 104, 238, 0.5)'
+            }}
           >
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#7b68ee" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <p>Drag & drop an image or click to browse</p>
-            {selectedFile && <FileName>{selectedFile.name}</FileName>}
-          </FileUploadArea>
-          <FileInputHidden 
-            id="file-upload"
-            type="file" 
-            accept="image/*"
-            onChange={handleFileChange}
-          />
-        </label>
-        
-        <div>
-          <FormTitle>Describe your desired 3D model</FormTitle>
-          <PromptInput
-            placeholder="Example: A highly detailed red dragon with iridescent scales and large wings in T-pose..."
-            value={prompt}
-            onChange={handlePromptChange}
-          />
+            Sign Up
+          </Button>
         </div>
         
-        <SubmitButton 
-          type="submit" 
-          disabled={!selectedFile || !prompt || isUploading}
-        >
-          {isUploading ? 'Processing...' : 'Generate 3D Model'}
-        </SubmitButton>
-      </UploadForm>
+        <div>
+          <Button 
+            onClick={() => onUploadSuccess({
+              model: '/models/sample.obj', // Pass the sample model
+              prompt: "Sample project"
+            })}
+            style={{ 
+              backgroundColor: 'rgba(123, 104, 238, 0.2)', 
+              border: '1px solid rgba(123, 104, 238, 0.3)'
+            }}
+          >
+            Try Demo (No Login Required)
+          </Button>
+        </div>
+      </div>
       
-      {imagePreview && (
-        <ImagePreviewContainer>
-          <ImagePreview src={imagePreview} alt="Image Preview" />
-        </ImagePreviewContainer>
+      {showAuthForm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <AuthForm 
+            mode={authMode} 
+            setMode={setAuthMode} 
+            onClose={closeAuthForm} 
+          />
+        </div>
       )}
+      
+      <BackgroundShape 
+        gradient="linear-gradient(135deg, rgba(123, 104, 238, 0.6) 0%, rgba(123, 104, 238, 0.2) 100%)"
+        size={300}
+        left={75}
+        top={20}
+        opacity={0.15}
+        blur={80}
+        float
+        duration="25s"
+      />
+      <BackgroundShape 
+        gradient="linear-gradient(135deg, rgba(123, 104, 238, 0.6) 0%, rgba(60, 50, 180, 0.2) 100%)"
+        size={400}
+        left={10}
+        top={70}
+        opacity={0.1}
+        blur={100}
+        float
+        duration="30s"
+        delay="2s"
+      />
     </LandingContainer>
   );
 }

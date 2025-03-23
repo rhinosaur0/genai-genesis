@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
+import { askGemini } from '../utils/geminiApi';
 
 const GEMINI_API_KEY = "AIzaSyD_3CxbJNcn98no6K-VNRo_do-oT5oHzh0";
 const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent";
@@ -32,32 +33,8 @@ function ChatComponent() {
     setIsLoading(true);
     
     try {
-      // Create the request to Gemini API
-      const response = await fetch(`${API_URL}?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: input }]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 1000,
-          },
-        }),
-      });
-      
-      const data = await response.json();
-      
-      // Extract the response text from Gemini
-      const aiResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text || 
-                         "Sorry, I couldn't process that request.";
+      // Use the centralized geminiApi utility to call the API
+      const aiResponse = await askGemini(input);
       
       // Add AI message to chat
       setMessages(prev => [...prev, {
