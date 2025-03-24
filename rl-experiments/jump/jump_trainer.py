@@ -16,7 +16,7 @@ import argparse
 register(
     id='BlockJump-v0',
     entry_point='jump_env:BlockJumpEnv',
-    max_episode_steps=200,
+    max_episode_steps=1000,
 )
 
 # Create logs directory

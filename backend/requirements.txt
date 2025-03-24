@@ -1,3 +1,7 @@
-# Use the main requirements file in the project root
-# All dependencies have been consolidated there
--r ../requirements.txt 
+pybullet
+trimesh
+numpy
+uvicorn
+fastapi
+pydantic
+gymnasium

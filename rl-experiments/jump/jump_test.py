@@ -92,6 +92,6 @@ def view_env():
 if __name__ == "__main__":
     # test_env()
     # test_forward()
-    test_jumping()
+    # test_jumping()
     # test_jump()
-    # view_env()
+    view_env()

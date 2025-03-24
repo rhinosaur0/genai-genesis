@@ -4,7 +4,7 @@ from jump_env import BlockJumpEnv
 
 def actor(obs):
     """
-    Actor function that determines the action based on observations
+    Simplified actor function that determines the action based on observations
     
     obs[0:3] - robot position (x, y, z)
     obs[3:6] - robot velocity (vx, vy, vz)
@@ -14,55 +14,68 @@ def actor(obs):
     robot_vx, robot_vy, robot_vz = obs[3], obs[4], obs[5]
     target_x, target_y, target_z = obs[6], obs[7], obs[8]
     
-    # Calculate horizontal distance to target
+    # Calculate distance to target
     distance_x = target_x - robot_x
     distance_y = target_y - robot_y
+    distance_z = target_z - robot_z
     
-    # Calculate block top position (assuming block has height of 1.0)
-    block_top_z = target_z + 0.4  # Adjust based on your block height
+    # Horizontal distance to target
+    horizontal_distance = np.sqrt(distance_x**2 + distance_y**2)
     
-    # 1. If we're directly above the block, apply landing/stabilizing forces
-    if abs(distance_x) < 0.3 and abs(distance_y) < 0.3 and robot_z > block_top_z - 0.5:
-        # When we're above the block, apply downward force to stay on it
-        # and counter horizontal velocity completely
-        return np.array([-robot_vx * 2.0, -robot_vy * 2.0, -2.0])
-    
-    # 2. If we're almost on top of the block, stabilize gently
-    if abs(distance_x) < 0.4 and abs(distance_y) < 0.4 and abs(robot_z - block_top_z) < 0.3:
-        # Apply stronger dampening force to stabilize
-        return np.array([-robot_vx * 3.0, -robot_vy * 3.0, -robot_vz * 2.0])
-    
-    # 3. If we're approaching but haven't jumped yet, prepare to jump
-    if 0.5 < distance_x < 1.2 and abs(distance_y) < 0.5 and robot_z < 0.7:
-        # Gentler jump with forward component
-        jump_force_x = 4.0
-        jump_force_z = 10.0
-        return np.array([jump_force_x, 0, jump_force_z])
-    
-    # 4. If we're in the air and need to adjust
-    if robot_z > 0.8:
-        # If we're above and past the target, apply reverse thrust
-        if robot_x > target_x:
-            return np.array([-3.0, -robot_vy * 1.5, 0])
-            
-        # If we're approaching the target from above, start slowing down
-        if distance_x < 1.0 and robot_z > block_top_z:
-            adjustment_x = distance_x * 1.0  # Gentler approach
-            adjustment_y = distance_y * 1.0
-            return np.array([adjustment_x - robot_vx * 0.8, -robot_vy * 0.8, -1.0])
-            
-        # Normal in-air adjustment
-        adjustment_x = distance_x * 1.5
-        adjustment_y = distance_y * 1.5
+    # Calculate normalized direction vector to target (horizontal only)
+    if horizontal_distance > 0.01:  # Avoid division by zero
+        dir_x = distance_x / horizontal_distance
+        dir_y = distance_y / horizontal_distance
+    else:
+        dir_x, dir_y = 0, 0
         
-        # Limit adjustments
-        adjustment_x = np.clip(adjustment_x, -5.0, 5.0)
-        adjustment_y = np.clip(adjustment_y, -5.0, 5.0)
+    # STATE 1: If we're on or above the table, stabilize
+    if robot_z >= target_z - 0.1 and horizontal_distance < 0.3:
+        # Apply dampening forces to stabilize
+        fx = -robot_vx * 2.0
+        fy = -robot_vy * 2.0
+        fz = -robot_vz * 2.0 - 1.0  # Extra downward force to stay on table
         
-        return np.array([adjustment_x, adjustment_y, 0])
+        return np.array([fx, fy, fz])
     
-    # 5. By default, move toward the block
-    return np.array([5.0, 0, 0.0])
+    # STATE 2: If we're close and need to jump up
+    if horizontal_distance < 0.8 and robot_z < target_z - 0.2:
+        # Jump force proportional to height needed
+        jump_force = max(5.0, (target_z - robot_z) * 10.0)
+        
+        # Add small horizontal nudge towards target
+        fx = dir_x * 3.0
+        fy = dir_y * 3.0
+        
+        return np.array([fx, fy, jump_force])
+    
+    # STATE 3: If we're in position to start the jump
+    if 0.6 < horizontal_distance < 1.2 and robot_z < 0.7:
+        # Calculate jump arc - need to estimate a good force based on distance
+        jump_horizontal = horizontal_distance * 4.0  # Horizontal component
+        jump_vertical = 8.0  # Vertical component
+        
+        return np.array([dir_x * jump_horizontal, dir_y * jump_horizontal, jump_vertical])
+    
+    # STATE 4: If we're in the air, make corrections
+    if robot_z > 0.7:
+        # Calculate corrective forces based on position and velocity
+        fx = dir_x * 3.0 - robot_vx * 0.5  # Dampen excess velocity
+        fy = dir_y * 3.0 - robot_vy * 0.5
+        fz = 0  # Let gravity work
+        
+        # If we're above the target and still moving up, apply downward force
+        if horizontal_distance < 0.3 and robot_vz > 0:
+            fz = -2.0
+            
+        return np.array([fx, fy, fz])
+    
+    # STATE 5: Default - move toward the target
+    # Simple proportional control to approach the target
+    fx = dir_x * 5.0
+    fy = dir_y * 5.0
+    
+    return np.array([fx, fy, 0.0])
 
 def jump_agent():
     """Main function that creates the environment and runs the agent"""
@@ -88,7 +101,9 @@ def jump_agent():
             
             if terminated or truncated:
                 print(f"Episode ended after {steps} steps with reward: {total_reward}")
-                if total_reward > 0:
+                if steps >= env.max_episode_steps:
+                    print("Episode truncated (reached max steps)")
+                elif total_reward > 0:
                     print("Success! Agent reached the target")
                 else:
                     print("Failed to reach the target")
@@ -103,4 +118,3 @@ def jump_agent():
 
 if __name__ == "__main__":
     jump_agent()
-    
