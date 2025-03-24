@@ -1,7 +1,0 @@
-pybullet
-trimesh
-numpy
-uvicorn
-fastapi
-pydantic
-gymnasium
